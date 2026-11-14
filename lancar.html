@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Lançamentos · Correias Alfa</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="theme-color" content="#080A0F">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap">
+<link rel="stylesheet" href="assets/painel.css">
+<style>
+:root { color-scheme: dark; --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-anthropic-serif: "Source Serif 4", Georgia, serif; }
+html, body { margin: 0; background: #080A0F; }
+body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
+.lf { max-width: 760px; margin: 0 auto; gap: 18px; padding-bottom: 120px; }
+.lf-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lf-logo { height: 40px; width: auto; }
+.lf-top h1 { margin: 2px 0 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(1.8rem, 6vw, 2.4rem); line-height: 1.05; }
+.lf-top .lf-tit { flex: 1; min-width: 0; }
+.lf-link { display: inline-flex; align-items: center; text-decoration: none; height: 34px; }
+.lf-card { padding: 18px 16px; display: flex; flex-direction: column; gap: 16px; }
+.lf-card h2 { margin: 0; font-size: 17px; font-weight: 500; }
+.lf-sub { margin: -8px 0 0; font-size: 13px; color: var(--fg-3); }
+.lf-campo { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lf-campo > label, .lf-rot { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-2); }
+.lf-rot b, .lf-campo > label b { color: var(--c-emer); font-weight: 600; }
+.lf-in { height: 44px; padding: 0 12px; font-size: 16px; }
+textarea.lf-in { height: auto; min-height: 88px; padding: 10px 12px; line-height: 1.45; resize: vertical; font-family: inherit; }
+input[type=date].lf-in { padding-right: 8px; }
+.lf-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.lf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.lf-chips .ca-chip { height: 40px; font-size: 14px; }
+.lf-erro { font-size: 12px; color: var(--c-emer); min-height: 0; }
+.lf-erro:empty { display: none; }
+.lf-info { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--fg-2); display: flex; flex-wrap: wrap; gap: 4px 14px; background: rgba(255,255,255,.02); }
+.lf-info:empty { display: none; }
+.lf-info b { color: var(--fg); font-weight: 500; }
+.lf-grupo { border: 1px solid rgba(124,196,255,.25); background: rgba(124,196,255,.05); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.lf-grupo h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.lf-emendas { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--fg-2); }
+.lf-emendas strong { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: 2rem; color: var(--fg); }
+.lf-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--fg-2); cursor: pointer; }
+.lf-check input { width: 20px; height: 20px; accent-color: var(--c-accent); }
+.lf-acoes { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(180deg, rgba(8,10,15,0), rgba(8,10,15,.92) 30%); }
+.lf-btn { flex: 1; height: 50px; border-radius: 12px; border: 0; background: var(--c-accent); color: #04121F; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; transition: filter .2s, transform .1s; }
+.lf-btn:hover { filter: brightness(1.08); }
+.lf-btn:active { transform: scale(.99); }
+.lf-btn:disabled { opacity: .45; cursor: default; }
+.lf-btn.lf-sec { flex: 0 0 auto; padding: 0 18px; background: rgba(255,255,255,.06); color: var(--fg); border: 1px solid var(--line-2); }
+.lf-revisao { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line-2); border-radius: 14px; overflow: hidden; }
+.lf-revisao div { display: grid; grid-template-columns: 150px 1fr; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.lf-revisao div:last-child { border-bottom: 0; }
+.lf-revisao span { color: var(--fg-3); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; padding-top: 2px; }
+.lf-quem { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--fg-2); }
+.lf-quem b { color: var(--fg); }
+.lf-tabs { display: flex; width: 100%; }
+.lf-tabs button { flex: 1; height: 38px; font-size: 14px; }
+.lf-aviso { border: 1px solid rgba(255,181,71,.4); background: rgba(255,181,71,.08); color: var(--c-corr); border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+.lf-hist ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lf-hist li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--fg-2); border-bottom: 1px solid var(--line); padding: 8px 0; }
+.lf-hist li b { color: var(--fg); font-weight: 500; }
+.lf-hist li code { font-family: var(--mono); font-size: 12px; color: var(--fg-3); }
+.lf-trechos { display: flex; flex-direction: column; gap: 12px; }
+.lf-trecho { border: 1px solid var(--line-2); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 12px; background: rgba(255,255,255,.02); }
+.lf-trecho-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lf-trecho-h b { font-family: var(--mono); font-size: 13px; }
+.lf-trecho .lf-in { height: 40px; font-size: 15px; }
+.lf-resumo { font-size: 13px; color: var(--fg-2); }
+.lf-resumo b { color: var(--fg); }
+.lf-toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 50; max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 12px; background: rgba(17,22,31,.96); border: 1px solid var(--line-2); box-shadow: 0 18px 40px -12px rgba(0,0,0,.7); font-size: 14px; transition: opacity .2s, transform .2s; }
+.lf-toast.lf-show { opacity: 1; transform: translate(-50%, 0); }
+.lf-toast.lf-ok { border-color: rgba(57,213,184,.6); }
+.lf-toast.lf-falha { border-color: rgba(255,92,122,.7); }
+.ca-chip[data-cor="CRÍTICO"][aria-pressed="true"] { border-color: var(--c-emer); background: rgba(255,92,122,.14); box-shadow: 0 0 0 3px rgba(255,92,122,.12); }
+.ca-chip[data-cor="REGULAR"][aria-pressed="true"] { border-color: var(--c-corr); background: rgba(255,181,71,.14); box-shadow: 0 0 0 3px rgba(255,181,71,.12); }
+.ca-chip[data-cor="BOM"][aria-pressed="true"] { border-color: var(--c-teal); background: rgba(57,213,184,.14); box-shadow: 0 0 0 3px rgba(57,213,184,.12); }
+@media (max-width: 480px) { .lf-revisao div { grid-template-columns: 1fr; gap: 2px; } .lf-logo { height: 32px; } }
+</style>
+</head>
+<body>
+<div id="dash-root">
+<div class="ca lf">
+  <header class="lf-top">
+    <img class="lf-logo" src="assets/logo-alfa.png" alt="Alfa Transportadores" width="520" height="200">
+    <div class="lf-tit">
+      <div class="ca-eyebrow">Correias Alfa 2026 · EuroChem Serra do Salitre</div>
+      <h1>Lançamentos</h1>
+    </div>
+    <a class="ca-ghost lf-link" href="./">Ver painel</a>
+  </header>
+
+  <div class="lf-aviso" id="sem-gravacao" hidden>A gravação ainda não foi ligada à planilha. Dá para preencher e revisar, mas o envio fica desativado até o script do Google ser configurado.</div>
+
+  <section class="ca-panel lf-card" id="entrar">
+    <h2>Entrar</h2>
+    <p class="lf-sub">Digite o seu PIN. Ele fica guardado neste aparelho até você clicar em "Trocar".</p>
+    <form id="form-pin" class="lf-campo" autocomplete="off">
+      <label for="pin">PIN</label>
+      <input class="ca-input lf-in" id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required>
+      <div class="lf-erro" id="pin-erro"></div>
+      <button type="submit" class="lf-btn" id="pin-btn">Entrar</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <div class="lf-quem"><span>Lançando como <b id="quem">—</b></span><button type="button" class="ca-ghost" id="trocar">Trocar</button></div>
+
+    <div class="ca-seg lf-tabs" role="tablist" aria-label="Tipo de lançamento">
+      <button type="button" role="tab" data-aba="atividade" aria-pressed="true">Atividade</button>
+      <button type="button" role="tab" data-aba="inspecao" aria-pressed="false">Inspeção</button>
+      <button type="button" role="tab" data-aba="trecho" aria-pressed="false">Trechos</button>
+    </div>
+
+    <!-- ATIVIDADE -->
+    <form class="ca-panel lf-card" id="f-atividade" data-tipo="atividade" novalidate>
+      <h2>Atividade realizada</h2>
+      <p class="lf-sub">Um lançamento por serviço. Campos com <b style="color:var(--c-emer)">*</b> são obrigatórios.</p>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="a-tag">Equipamento <b>*</b></label><input class="ca-input lf-in" id="a-tag" list="l-tags" placeholder="ex.: 430TP008" autocomplete="off" data-tag-info="a-info"><div class="lf-erro" data-erro="tag"></div></div>
+        <div class="lf-campo"><label for="a-data">Data <b>*</b></label><input class="ca-input lf-in" id="a-data" type="date"><div class="lf-erro" data-erro="data"></div></div>
+      </div>
+      <div class="lf-info" id="a-info"></div>
+      <div class="lf-campo"><span class="lf-rot">Atividade <b>*</b></span><div class="lf-chips" id="a-ativ" data-opcoes="SUBSTITUIR|EMPALMO|REFAZER EMENDA|REPARAR EMENDA|REPARO A FRIO|REPARO A QUENTE|REPARO COM GRAMPO|TRUE FIX|REVESTIR TAMBOR|PREPARAÇÃO|MANUTENÇÃO"></div><div class="lf-erro" data-erro="ativ"></div></div>
+
+      <div class="lf-grupo" id="a-nova" hidden>
+        <h3 id="a-nova-t">Correia nova que entrou</h3>
+        <div class="lf-linha">
+          <div class="lf-campo"><label for="a-metros">Metros que entraram <b>*</b></label><input class="ca-input lf-in" id="a-metros" type="number" inputmode="decimal" min="0" step="0.1" placeholder="ex.: 250"><div class="lf-erro" data-erro="metros"></div></div>
+          <div class="lf-campo"><label for="a-bobinas">Bobinas usadas <b>*</b></label><input class="ca-input lf-in" id="a-bobinas" type="number" inputmode="numeric" min="1" step="1" value="1"><div class="lf-erro" data-erro="bobinas"></div></div>
+        </div>
+        <div class="lf-campo"><span class="lf-rot">Fabricante</span><div class="lf-chips" id="a-fab" data-opcoes="BORPAC|MERCURIO|METSO|FLEXSTEEL|OUTRO"></div></div>
+      </div>
+      <div class="lf-grupo" id="a-emendas-box" hidden>
+        <div class="lf-emendas"><strong id="a-emendas-n">0</strong><span id="a-emendas-exp">emendas</span></div>
+        <div class="lf-campo"><label for="a-emendas">Corrigir número de emendas (só se for diferente)</label><input class="ca-input lf-in" id="a-emendas" type="number" inputmode="numeric" min="0" step="1" placeholder="deixe vazio para usar o cálculo"></div>
+      </div>
+
+      <div class="lf-campo"><span class="lf-rot">Tipo de emenda ou reparo</span><div class="lf-chips" id="a-tipo" data-opcoes="EMENDA FRIA|EMENDA QUENTE|EMENDA MECÂNICA|FLEXSTEEL|REPARO COM TIRA|REPARO COM LONA|RECOLAR|EMBUTIDO|TRUE FIX|REPARO COM GRAMPO|REPOSIÇÃO DE COBERTURA"></div></div>
+      <div class="lf-campo"><span class="lf-rot">Programação <b>*</b></span><div class="lf-chips" id="a-prog" data-opcoes="PROGRAMADO|OPORTUNIDADE|CORRETIVA|EMERGENCIA"></div><div class="lf-erro" data-erro="prog"></div></div>
+      <div class="lf-campo"><span class="lf-rot">Motivo <b>*</b></span><div class="lf-chips" id="a-motivo" data-opcoes="DANO NA CORREIA|DANO NA EMENDA|DANO LONGITUDINAL|DESGASTE DA CORREIA|PROTEGER EMENDA|CORREIA ROMPEU|DESGASTE"></div><div class="lf-erro" data-erro="motivo"></div></div>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="a-horas">Duração (horas) <b>*</b></label><input class="ca-input lf-in" id="a-horas" type="number" inputmode="decimal" min="0" step="0.5" placeholder="ex.: 8"><label class="lf-check"><input type="checkbox" id="a-parada"> Parada anual (sem horas)</label><div class="lf-erro" data-erro="horas"></div></div>
+        <div class="lf-campo"><span class="lf-rot">Situação</span><div class="lf-chips" id="a-sit" data-opcoes="FINALIZADO|EM ANDAMENTO" data-padrao="FINALIZADO"></div></div>
+      </div>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="a-equipe">Equipe</label><input class="ca-input lf-in" id="a-equipe" placeholder="nomes, separados por vírgula"></div>
+        <div class="lf-campo"><label for="a-os">OS / nota</label><input class="ca-input lf-in" id="a-os" inputmode="numeric" placeholder="ex.: 4274115"></div>
+      </div>
+      <div class="lf-campo"><label for="a-obs">Observação</label><textarea class="ca-input lf-in" id="a-obs" placeholder="o que foi encontrado, o que ficou pendente…"></textarea></div>
+      <div class="lf-acoes"><button type="submit" class="lf-btn">Revisar</button></div>
+    </form>
+
+    <!-- INSPEÇÃO -->
+    <form class="ca-panel lf-card" id="f-inspecao" data-tipo="inspecao" novalidate hidden>
+      <h2>Inspeção da correia</h2>
+      <p class="lf-sub">Um lançamento por correia em cada visita. A mais recente atualiza a condição atual no painel.</p>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="i-tag">Equipamento <b>*</b></label><input class="ca-input lf-in" id="i-tag" list="l-tags" placeholder="ex.: 420TP013" autocomplete="off" data-tag-info="i-info"><div class="lf-erro" data-erro="tag"></div></div>
+        <div class="lf-campo"><label for="i-data">Data <b>*</b></label><input class="ca-input lf-in" id="i-data" type="date"><div class="lf-erro" data-erro="data"></div></div>
+      </div>
+      <div class="lf-info" id="i-info"></div>
+      <div class="lf-campo"><span class="lf-rot">Situação <b>*</b></span><div class="lf-chips" id="i-sit" data-opcoes="BOM|REGULAR|CRÍTICO"></div><div class="lf-erro" data-erro="sit"></div></div>
+      <div class="lf-campo"><label for="i-visto">O que foi visto <b>*</b></label><textarea class="ca-input lf-in" id="i-visto" placeholder="ex.: dano longitudinal no lado direito, atingiu a primeira lona"></textarea><div class="lf-erro" data-erro="visto"></div></div>
+      <div class="lf-campo"><label for="i-acao">Ação recomendada</label><textarea class="ca-input lf-in" id="i-acao" placeholder="ex.: acompanhar evolução; programar reparo a quente"></textarea></div>
+      <div class="lf-campo"><span class="lf-rot">Correia preparada?</span><div class="lf-chips" id="i-prep" data-opcoes="SIM|NÃO|EM PREPARAÇÃO"></div></div>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="i-rec">Recursos necessários</label><input class="ca-input lf-in" id="i-rec" placeholder="ex.: caminhão munk, guindaste"></div>
+        <div class="lf-campo"><label for="i-larg">Largura medida (pol)</label><input class="ca-input lf-in" id="i-larg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="se houver perda de borda"></div>
+      </div>
+      <div class="lf-campo"><label for="i-insp">Inspetor</label><input class="ca-input lf-in" id="i-insp"></div>
+      <div class="lf-acoes"><button type="submit" class="lf-btn">Revisar</button></div>
+    </form>
+
+    <!-- TRECHOS -->
+    <form class="ca-panel lf-card" id="f-trecho" data-tipo="trecho" novalidate hidden>
+      <h2>Mapa de trechos</h2>
+      <p class="lf-sub">Para correias longas, emenda a emenda. Carregue o mapa atual, ajuste o que mudou e envie o mapa completo: ele passa a ser o mapa da correia no painel.</p>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="t-tag">Equipamento <b>*</b></label><input class="ca-input lf-in" id="t-tag" list="l-tags" placeholder="ex.: 150TP004" autocomplete="off" data-tag-info="t-info"><div class="lf-erro" data-erro="tag"></div></div>
+        <div class="lf-campo"><label for="t-data">Data da inspeção <b>*</b></label><input class="ca-input lf-in" id="t-data" type="date"><div class="lf-erro" data-erro="data"></div></div>
+      </div>
+      <div class="lf-info" id="t-info"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="ca-ghost" id="t-carregar" style="height:38px">Carregar mapa atual</button>
+        <button type="button" class="ca-ghost" id="t-add" style="height:38px">+ Adicionar trecho</button>
+      </div>
+      <div class="lf-resumo" id="t-resumo"></div>
+      <div class="lf-erro" data-erro="trechos"></div>
+      <div class="lf-trechos" id="t-lista"></div>
+      <div class="lf-acoes"><button type="submit" class="lf-btn">Revisar</button></div>
+    </form>
+
+    <!-- REVISÃO -->
+    <section class="ca-panel lf-card" id="revisao" hidden>
+      <h2>Confira antes de enviar</h2>
+      <div class="lf-revisao" id="rev-lista"></div>
+      <div class="lf-erro" id="rev-erro"></div>
+      <div class="lf-acoes"><button type="button" class="lf-btn lf-sec" id="rev-voltar">Voltar e corrigir</button><button type="button" class="lf-btn" id="rev-enviar">Enviar</button></div>
+    </section>
+
+    <section class="ca-panel lf-card lf-hist">
+      <h2>Enviados neste aparelho</h2>
+      <p class="lf-sub">O painel mostra os lançamentos novos alguns minutos depois do envio.</p>
+      <ul id="hist"></ul>
+    </section>
+  </div>
+
+  <datalist id="l-tags"></datalist>
+  <div class="lf-toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+</div>
+
+<script src="assets/ca-dados.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var hojeISO = function () { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  var isoBR = function (s) { return s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''; };
+  var cap = function (v) { v = String(v || ''); return v ? v.charAt(0) + v.slice(1).toLowerCase() : ''; };
+  var nf1 = new Intl.NumberFormat('pt-BR', {maximumFractionDigits: 1});
+  var guarda = {
+    get: function (k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento: segue sem lembrar */ } },
+    del: function (k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } }
+  };
+
+  /* ---------- Cadastro: lido das abas publicadas, para sugerir TAGs e mostrar a correia ---------- */
+  var cad = {tags: {}, trechos: []};
+  function carregarCadastro() {
+    var pedidos = CA_FONTES.filter(function (f) { return f.gid && ['especificacao', 'condicao', 'atividades', 'equipamento', 'lanc_trechos', 'lanc_insp'].indexOf(f.id) >= 0; });
+    var res = {spec: [], cond: [], ativ: [], trechos: [], lancTr: [], insp: []};
+    return Promise.all(pedidos.map(function (f) {
+      return fetch(CA_BASE + f.gid + '&_=' + Date.now(), {cache: 'no-store'}).then(function (r) { return r.text(); }).then(function (t) {
+        var rows = CA.csv(t);
+        if (f.id === 'especificacao') res.spec = CA.lerEspecificacao(rows);
+        else if (f.id === 'condicao') res.cond = CA.lerCondicao(rows);
+        else if (f.id === 'atividades') res.ativ = CA.lerAtividades(rows, 'atividades');
+        else if (f.id === 'equipamento') res.trechos = res.trechos.concat(CA.lerEquipamento(rows, f.tag).trechos);
+        else if (f.id === 'lanc_trechos') res.lancTr = CA.lerLancTrechos(rows);
+        else if (f.id === 'lanc_insp') res.insp = CA.lerLancInspecoes(rows);
+      }).catch(function (e) { console.error('aba', f.nome, e); });
+    })).then(function () {
+      var tags = {};
+      var pega = function (t) { if (!tags[t]) tags[t] = {tag: t, planta: CA.planta(t)}; return tags[t]; };
+      res.spec.forEach(function (s) { var o = pega(s.equipamento); o.carcaca = o.carcaca || s.carcaca; o.largura = o.largura || s.largura_pol; o.metros = s.metros; });
+      CA.aplicarInspecoes(res.cond, res.insp).forEach(function (c) {
+        var o = pega(c.equipamento);
+        if (c.carcaca) o.carcaca = c.carcaca;
+        if (c.largura_pol) o.largura = c.largura_pol;
+        if (o.metros == null && c.medida === 'TOTAL') o.metros = c.comprimento;
+        o.situacao = c.situacao; o.responsavel = c.responsavel;
+      });
+      res.ativ.forEach(function (a) { var o = pega(a.equipamento); if (a.planta) o.planta = a.planta; });
+      cad.tags = tags;
+      var novo = CA.ultimoMapa(res.lancTr), comNovo = {};
+      novo.forEach(function (t) { comNovo[t.equipamento] = 1; });
+      cad.trechos = res.trechos.filter(function (t) { return !comNovo[t.equipamento]; }).concat(novo);
+      var dl = $('l-tags');
+      dl.replaceChildren.apply(dl, Object.keys(tags).sort().map(function (t) { var o = document.createElement('option'); o.value = t; return o; }));
+      document.querySelectorAll('[data-tag-info]').forEach(function (inp) { mostrarCorreia(inp); });
+    });
+  }
+  function mostrarCorreia(inp) {
+    var box = $(inp.dataset.tagInfo), tag = CA.tag(inp.value), o = cad.tags[tag];
+    box.replaceChildren();
+    if (!inp.value.trim()) return;
+    var add = function (rot, val) { if (val == null || val === '') return; var s = document.createElement('span'); s.append(rot + ' '); var b = document.createElement('b'); b.textContent = val; s.append(b); box.append(s); };
+    if (!o) { add('', CA.tagValida(tag) ? tag + ' não está no cadastro. Confira a TAG; se estiver certa, pode lançar.' : 'TAG fora do padrão (ex.: 430TP008).'); return; }
+    add('', tag); add('Planta', cap(o.planta)); add('Carcaça', o.carcaca); add('Largura', o.largura ? o.largura + '"' : '');
+    add('Comprimento', o.metros != null ? nf1.format(o.metros) + ' m' : ''); add('Situação', cap(o.situacao)); add('Resp. EuroChem', o.responsavel ? cap(o.responsavel) : '');
+  }
+
+  /* ---------- Botões de escolha ---------- */
+  function montarChips(el) {
+    var opcoes = el.dataset.opcoes.split('|');
+    el.replaceChildren.apply(el, opcoes.map(function (v) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'ca-chip'; b.dataset.v = v; b.dataset.cor = v;
+      b.setAttribute('aria-pressed', 'false'); b.textContent = v === 'EMERGENCIA' ? 'Emergência' : cap(v);
+      b.addEventListener('click', function () {
+        var ja = b.getAttribute('aria-pressed') === 'true';
+        el.querySelectorAll('.ca-chip').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+        if (!ja || el.dataset.padrao) b.setAttribute('aria-pressed', 'true');
+        el.dispatchEvent(new Event('escolha'));
+      });
+      return b;
+    }));
+    if (el.dataset.padrao) valorChips(el, el.dataset.padrao);
+  }
+  function valorChips(el, v) {
+    if (v === undefined) { var s = el.querySelector('[aria-pressed="true"]'); return s ? s.dataset.v : ''; }
+    el.querySelectorAll('.ca-chip').forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.v === v)); });
+  }
+  document.querySelectorAll('[data-opcoes]').forEach(montarChips);
+  document.querySelectorAll('[data-tag-info]').forEach(function (inp) {
+    inp.addEventListener('input', function () { mostrarCorreia(inp); });
+    inp.addEventListener('blur', function () { if (inp.value.trim()) { inp.value = CA.tag(inp.value); mostrarCorreia(inp); } });
+  });
+  ['a-data', 'i-data', 't-data'].forEach(function (id) { $(id).value = hojeISO(); $(id).max = hojeISO(); $(id).min = '2020-01-01'; });
+
+  /* ---------- Atividade: correia nova e emendas ---------- */
+  function atualizarAtividade() {
+    var at = valorChips($('a-ativ')), nova = at === 'SUBSTITUIR' || at === 'EMPALMO';
+    $('a-nova').hidden = !nova;
+    $('a-nova-t').textContent = at === 'EMPALMO' ? 'Trecho novo que entrou' : 'Correia nova que entrou';
+    var b = Math.max(1, Math.round(Number($('a-bobinas').value) || 1)), n = 0, exp = '';
+    if (at === 'EMPALMO') { n = b + 1; exp = b === 1 ? 'emendas: 2 para ligar o trecho novo à correia velha' : 'emendas: ' + (b - 1) + ' entre as ' + b + ' bobinas + 2 para ligar à correia velha'; }
+    else if (at === 'SUBSTITUIR') { n = b; exp = b === 1 ? 'emenda: a de fechamento da correia' : 'emendas: ' + (b - 1) + ' entre as ' + b + ' bobinas + 1 de fechamento'; }
+    else if (at === 'REFAZER EMENDA') { n = 1; exp = 'emenda refeita'; }
+    $('a-emendas-box').hidden = !n;
+    $('a-emendas-n').textContent = n;
+    $('a-emendas-exp').textContent = exp;
+    $('a-emendas-n').dataset.calc = n;
+    if (at === 'EMPALMO' || at === 'SUBSTITUIR') {
+      // sugestão: cabo de aço vai a quente; lona, a frio (pode trocar)
+      var o = cad.tags[CA.tag($('a-tag').value)] || {};
+      if (!valorChips($('a-tipo'))) valorChips($('a-tipo'), CA.tipoCarcaca(o.carcaca || '') === 'CABO DE AÇO' ? 'EMENDA QUENTE' : 'EMENDA FRIA');
+    }
+  }
+  $('a-ativ').addEventListener('escolha', atualizarAtividade);
+  $('a-bobinas').addEventListener('input', atualizarAtividade);
+  $('a-parada').addEventListener('change', function () { $('a-horas').disabled = $('a-parada').checked; if ($('a-parada').checked) $('a-horas').value = ''; });
+
+  /* ---------- Trechos ---------- */
+  var FAB = ['BORPAC', 'MERCURIO', 'METSO', 'FLEXSTEEL', 'OUTRO'];
+  function campoT(rot, cls, val, attrs) {
+    var w = document.createElement('div'); w.className = 'lf-campo';
+    var l = document.createElement('label'); l.textContent = rot;
+    var i = document.createElement('input'); i.className = 'ca-input lf-in ' + cls; i.value = val == null ? '' : val;
+    Object.keys(attrs || {}).forEach(function (k) { i.setAttribute(k, attrs[k]); });
+    var id = 'tf' + Math.random().toString(36).slice(2, 8); i.id = id; l.htmlFor = id;
+    w.append(l, i); return w;
+  }
+  function addTrecho(t) {
+    t = t || {};
+    var c = document.createElement('div'); c.className = 'lf-trecho';
+    var h = document.createElement('div'); h.className = 'lf-trecho-h';
+    var b = document.createElement('b'); var rm = document.createElement('button'); rm.type = 'button'; rm.className = 'ca-ghost'; rm.textContent = 'Remover';
+    rm.addEventListener('click', function () { c.remove(); renumerar(); });
+    h.append(b, rm); c.append(h);
+    var l1 = document.createElement('div'); l1.className = 'lf-linha';
+    l1.append(campoT('Emenda inicial *', 't-ini', t.inicio, {placeholder: 'ex.: AF20-08-26'}), campoT('Emenda final *', 't-fim', t.fim, {placeholder: 'ex.: AF19-08-26'}));
+    var l2 = document.createElement('div'); l2.className = 'lf-linha';
+    l2.append(campoT('Comprimento (m) *', 't-m', t.comprimento, {type: 'number', inputmode: 'decimal', step: '0.01', min: '0'}),
+      campoT('Espessura (mm)', 't-esp', t.espessura, {type: 'number', inputmode: 'decimal', step: '0.5', min: '0'}),
+      campoT('Largura medida (pol)', 't-pol', t.largura_medida, {type: 'number', inputmode: 'decimal', step: '0.5', min: '0'}));
+    var l3 = document.createElement('div'); l3.className = 'lf-linha';
+    var fab = campoT('Fabricante', 't-fab', t.fabricante && t.fabricante !== 'NÃO INFORMADO' ? t.fabricante : '', {list: 'l-fab', placeholder: 'BORPAC, MERCURIO…'});
+    l3.append(fab, campoT('Classe / nomenclatura', 't-cls', t.classe ? t.classe + (t.cabos ? ' ' + t.cabos + ' CABOS' : '') : '', {placeholder: 'ex.: ST1400 53 CABOS'}),
+      campoT('Instalado em', 't-inst', t.data_instalacao || '', {type: 'date'}));
+    var l4 = document.createElement('div'); l4.className = 'lf-linha';
+    l4.append(campoT('Centro da correia', 't-cen', t.centro == null ? 'OK' : t.centro.replace(/\s*\n\s*/g, ' · ')),
+      campoT('Emenda', 't-emd', t.emendas == null ? 'OK' : t.emendas.replace(/\s*\n\s*/g, ' · ')),
+      campoT('Bordas', 't-bor', t.bordas == null ? 'OK' : t.bordas.replace(/\s*\n\s*/g, ' · ')));
+    var l5 = document.createElement('div'); l5.className = 'lf-linha';
+    l5.append(campoT('Reparos', 't-rep', (t.reparos || '').replace(/\s*\n\s*/g, ' · '), {placeholder: 'ex.: 50X300MM'}),
+      campoT('Situação dos reparos', 't-srp', (t.situacao_reparos || '').replace(/\s*\n\s*/g, ' · '), {placeholder: 'ex.: OK, NOK, realizar reparo a quente'}));
+    c.append(l1, l2, l3, l4, l5);
+    c.addEventListener('input', resumoTrechos);
+    $('t-lista').append(c);
+    renumerar();
+  }
+  (function () { var dl = document.createElement('datalist'); dl.id = 'l-fab'; FAB.slice(0, 4).forEach(function (f) { var o = document.createElement('option'); o.value = f; dl.append(o); }); document.body.append(dl); })();
+  function renumerar() { $('t-lista').querySelectorAll('.lf-trecho').forEach(function (c, i) { c.querySelector('.lf-trecho-h b').textContent = 'Trecho ' + (i + 1); }); resumoTrechos(); }
+  function lerTrechos() {
+    return Array.prototype.map.call($('t-lista').querySelectorAll('.lf-trecho'), function (c) {
+      var v = function (cls) { return c.querySelector('.' + cls).value.trim(); };
+      return {ini: v('t-ini').toUpperCase(), fim: v('t-fim').toUpperCase(), m: v('t-m'), esp: v('t-esp'), pol: v('t-pol'), fab: v('t-fab').toUpperCase(), cls: v('t-cls').toUpperCase(),
+        inst: v('t-inst'), cen: v('t-cen'), emd: v('t-emd'), bor: v('t-bor'), rep: v('t-rep'), srp: v('t-srp')};
+    });
+  }
+  function resumoTrechos() {
+    var ts = lerTrechos(), total = ts.reduce(function (s, t) { return s + (Number(t.m) || 0); }, 0);
+    $('t-resumo').replaceChildren();
+    if (!ts.length) { $('t-resumo').textContent = 'Nenhum trecho. Carregue o mapa atual ou adicione os trechos.'; return; }
+    var b1 = document.createElement('b'); b1.textContent = ts.length + ' trechos';
+    var b2 = document.createElement('b'); b2.textContent = ts.length + ' emendas';
+    var b3 = document.createElement('b'); b3.textContent = nf1.format(total) + ' m';
+    $('t-resumo').append(b1, ' · ', b2, ' · ', b3, ' no total');
+  }
+  $('t-add').addEventListener('click', function () { addTrecho({}); });
+  $('t-carregar').addEventListener('click', function () {
+    var tag = CA.tag($('t-tag').value);
+    var ts = cad.trechos.filter(function (t) { return t.equipamento === tag; });
+    if (!ts.length) { aviso('Não há mapa de trechos salvo para ' + (tag || 'esta TAG') + '. Adicione os trechos à mão.', true); return; }
+    $('t-lista').replaceChildren();
+    ts.sort(function (a, b) { return a.ordem - b.ordem; }).forEach(addTrecho);
+    aviso('Mapa da ' + tag + ' carregado: ' + ts.length + ' trechos.');
+  });
+  resumoTrechos();
+
+  /* ---------- Validação e montagem do envio ---------- */
+  function erro(form, k, msg) { var e = form.querySelector('[data-erro="' + k + '"]'); if (e) e.textContent = msg || ''; }
+  function limparErros(form) { form.querySelectorAll('[data-erro]').forEach(function (e) { e.textContent = ''; }); }
+  function validarBase(form, pre) {
+    var ok = true, tag = CA.tag($(pre + '-tag').value), data = $(pre + '-data').value;
+    if (!CA.tagValida(tag)) { erro(form, 'tag', 'Informe a TAG no padrão, ex.: 430TP008.'); ok = false; }
+    if (!data) { erro(form, 'data', 'Informe a data.'); ok = false; }
+    else if (data > hojeISO()) { erro(form, 'data', 'A data não pode ser no futuro.'); ok = false; }
+    return {ok: ok, tag: tag, data: data};
+  }
+  function montar(tipo) {
+    var form = $('f-' + tipo); limparErros(form);
+    if (tipo === 'atividade') {
+      var b = validarBase(form, 'a'), ok = b.ok;
+      var at = valorChips($('a-ativ')), prog = valorChips($('a-prog')), mot = valorChips($('a-motivo'));
+      var nova = at === 'SUBSTITUIR' || at === 'EMPALMO', parada = $('a-parada').checked, horas = $('a-horas').value;
+      if (!at) { erro(form, 'ativ', 'Escolha a atividade.'); ok = false; }
+      if (!prog) { erro(form, 'prog', 'Escolha a programação.'); ok = false; }
+      if (!mot) { erro(form, 'motivo', 'Escolha o motivo.'); ok = false; }
+      if (!parada && !(Number(horas) > 0)) { erro(form, 'horas', 'Informe as horas ou marque Parada anual.'); ok = false; }
+      if (nova && !(Number($('a-metros').value) > 0)) { erro(form, 'metros', 'Informe quantos metros de correia entraram.'); ok = false; }
+      if (nova && !(Number($('a-bobinas').value) >= 1)) { erro(form, 'bobinas', 'Informe quantas bobinas foram usadas (mínimo 1).'); ok = false; }
+      if (!ok) return null;
+      var calc = Number($('a-emendas-n').dataset.calc || 0), corr = $('a-emendas').value.trim();
+      var emendas = corr !== '' ? Math.round(Number(corr)) : calc;
+      var reg = {'EQUIPAMENTO': b.tag, 'PLANTA': (cad.tags[b.tag] || {}).planta || CA.planta(b.tag), 'DATA': isoBR(b.data), 'ATIVIDADE': at,
+        'TIPO DE EMENDA OU REPARO': valorChips($('a-tipo')), 'PROGRAMAÇÃO': prog, 'MOTIVO': mot, 'DURAÇÃO EM HORAS': parada ? 'PARADA ANUAL' : String(horas).replace('.', ','),
+        'SITUAÇÃO': valorChips($('a-sit')), 'BOBINAS': nova ? String(Math.round(Number($('a-bobinas').value))) : '', 'METROS IMPLEMENTADOS': nova ? String($('a-metros').value).replace('.', ',') : '',
+        'EMENDAS FEITAS': emendas ? String(emendas) : (at === 'EMPALMO' || at === 'SUBSTITUIR' || at === 'REFAZER EMENDA' ? '0' : ''), 'FABRICANTE': nova ? valorChips($('a-fab')) : '',
+        'EQUIPE': $('a-equipe').value.trim(), 'OS': $('a-os').value.trim(), 'OBS': $('a-obs').value.trim()};
+      var linhas = [['Equipamento', reg.EQUIPAMENTO], ['Data', reg.DATA], ['Atividade', cap(at)], ['Tipo', cap(reg['TIPO DE EMENDA OU REPARO']) || '—'], ['Programação', prog === 'EMERGENCIA' ? 'Emergência' : cap(prog)],
+        ['Motivo', cap(mot)], ['Duração', parada ? 'Parada anual' : horas + ' h'], ['Situação', cap(reg['SITUAÇÃO'])]];
+      if (nova) linhas.push(['Metros que entraram', reg['METROS IMPLEMENTADOS'] + ' m'], ['Bobinas', reg.BOBINAS], ['Fabricante', cap(reg.FABRICANTE) || '—']);
+      if (reg['EMENDAS FEITAS']) linhas.push(['Emendas feitas', reg['EMENDAS FEITAS'] + (corr !== '' ? ' (corrigido à mão)' : '')]);
+      if (reg.EQUIPE) linhas.push(['Equipe', reg.EQUIPE]);
+      if (reg.OS) linhas.push(['OS', reg.OS]);
+      if (reg.OBS) linhas.push(['Observação', reg.OBS]);
+      return {tipo: tipo, registros: [reg], linhas: linhas, resumo: cap(at) + ' · ' + reg.EQUIPAMENTO + ' · ' + reg.DATA};
+    }
+    if (tipo === 'inspecao') {
+      var bi = validarBase(form, 'i'), oki = bi.ok, sit = valorChips($('i-sit')), visto = $('i-visto').value.trim();
+      if (!sit) { erro(form, 'sit', 'Escolha a situação.'); oki = false; }
+      if (!visto) { erro(form, 'visto', 'Descreva o que foi visto (mesmo que seja "sem alteração").'); oki = false; }
+      if (!oki) return null;
+      var ri = {'EQUIPAMENTO': bi.tag, 'DATA': isoBR(bi.data), 'SITUAÇÃO': sit, 'O QUE FOI VISTO': visto, 'AÇÃO RECOMENDADA': $('i-acao').value.trim(),
+        'CORREIA PREPARADA?': valorChips($('i-prep')), 'RECURSOS NECESSÁRIOS': $('i-rec').value.trim(), 'LARGURA MEDIDA (POL)': String($('i-larg').value).replace('.', ','), 'INSPETOR': $('i-insp').value.trim()};
+      var li = [['Equipamento', ri.EQUIPAMENTO], ['Data', ri.DATA], ['Situação', cap(sit)], ['O que foi visto', visto]];
+      if (ri['AÇÃO RECOMENDADA']) li.push(['Ação recomendada', ri['AÇÃO RECOMENDADA']]);
+      if (ri['CORREIA PREPARADA?']) li.push(['Correia preparada?', cap(ri['CORREIA PREPARADA?'])]);
+      if (ri['RECURSOS NECESSÁRIOS']) li.push(['Recursos', ri['RECURSOS NECESSÁRIOS']]);
+      if (ri['LARGURA MEDIDA (POL)']) li.push(['Largura medida', ri['LARGURA MEDIDA (POL)'] + '"']);
+      li.push(['Inspetor', ri.INSPETOR || '—']);
+      return {tipo: tipo, registros: [ri], linhas: li, resumo: 'Inspeção ' + cap(sit) + ' · ' + ri.EQUIPAMENTO + ' · ' + ri.DATA};
+    }
+    var bt = validarBase(form, 't'), okt = bt.ok, ts = lerTrechos();
+    if (!ts.length) { erro(form, 'trechos', 'Adicione pelo menos um trecho.'); okt = false; }
+    var ruins = ts.map(function (t, i) { return (!t.ini || !t.fim || !(Number(t.m) > 0)) ? i + 1 : 0; }).filter(Boolean);
+    if (ruins.length) { erro(form, 'trechos', 'Preencha emenda inicial, emenda final e comprimento nos trechos ' + ruins.join(', ') + '.'); okt = false; }
+    if (!okt) return null;
+    var quebras = [];
+    ts.forEach(function (t, i) { var prox = ts[(i + 1) % ts.length]; if (ts.length > 1 && t.fim !== prox.ini) quebras.push((i + 1) + '→' + ((i + 1) % ts.length + 1)); });
+    var total = ts.reduce(function (s, t) { return s + Number(t.m); }, 0);
+    var regs = ts.map(function (t, i) {
+      return {'EQUIPAMENTO': bt.tag, 'DATA INSPEÇÃO': isoBR(bt.data), 'ORDEM': String(i + 1), 'TRECHO': t.ini + '/' + t.fim, 'DATA TRECHO': isoBR(t.inst),
+        'COMPRIMENTO (M)': String(t.m).replace('.', ','), 'ESPESSURA (MM)': String(t.esp).replace('.', ','), 'NOMECLATURA': [t.fab, t.cls].filter(Boolean).join(' '),
+        'POL': String(t.pol).replace('.', ','), 'CENTRO DA CORREIA': t.cen, 'EMENDAS': t.emd, 'BORDAS': t.bor, 'REPAROS': t.rep, 'SITUAÇÃO REPAROS': t.srp};
+    });
+    var lt = [['Equipamento', bt.tag], ['Data da inspeção', isoBR(bt.data)], ['Trechos', String(ts.length)], ['Emendas', String(ts.length)], ['Comprimento total', nf1.format(total) + ' m']];
+    if (quebras.length) lt.push(['Atenção', 'a emenda final não bate com a inicial do próximo trecho em ' + quebras.join(', ') + '. Confira antes de enviar.']);
+    return {tipo: 'trecho', registros: regs, linhas: lt, resumo: 'Mapa de trechos · ' + bt.tag + ' · ' + ts.length + ' trechos'};
+  }
+
+  /* ---------- Fluxo: abas, revisão, envio ---------- */
+  var abaAtual = 'atividade', pendente = null;
+  document.querySelectorAll('[data-aba]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      abaAtual = b.dataset.aba;
+      document.querySelectorAll('[data-aba]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      ['atividade', 'inspecao', 'trecho'].forEach(function (t) { $('f-' + t).hidden = t !== abaAtual; });
+      $('revisao').hidden = true;
+    });
+  });
+  ['atividade', 'inspecao', 'trecho'].forEach(function (t) {
+    $('f-' + t).addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var p = montar(t);
+      if (!p) { var e = $('f-' + t).querySelector('.lf-erro:not(:empty)'); if (e) e.scrollIntoView({block: 'center', behavior: 'smooth'}); aviso('Faltam informações. Veja os campos em vermelho.', true); return; }
+      pendente = p;
+      var lista = $('rev-lista'); lista.replaceChildren();
+      p.linhas.forEach(function (l) { var d = document.createElement('div'), s = document.createElement('span'), v = document.createElement('p'); v.style.margin = '0'; s.textContent = l[0]; v.textContent = l[1]; d.append(s, v); lista.append(d); });
+      $('rev-erro').textContent = '';
+      $('f-' + t).hidden = true; $('revisao').hidden = false;
+      $('rev-enviar').disabled = !CA_GRAVACAO;
+      $('revisao').scrollIntoView({block: 'start', behavior: 'smooth'});
+    });
+  });
+  $('rev-voltar').addEventListener('click', function () { $('revisao').hidden = true; $('f-' + abaAtual).hidden = false; });
+  $('rev-enviar').addEventListener('click', function () {
+    if (!pendente || !CA_GRAVACAO) return;
+    var btn = $('rev-enviar'); btn.disabled = true; btn.textContent = 'Enviando…';
+    enviar({pin: sessao.pin, tipo: pendente.tipo, registros: pendente.registros}).then(function (r) {
+      if (!r.ok) throw new Error(r.erro || 'A planilha recusou o envio.');
+      historico(pendente, r.id);
+      aviso('Gravado na planilha (código ' + r.id + ').');
+      limparForm(pendente.tipo);
+      pendente = null;
+      $('revisao').hidden = true; $('f-' + abaAtual).hidden = false;
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    }).catch(function (e) {
+      $('rev-erro').textContent = 'Não foi gravado: ' + e.message + ' Confira a internet e tente de novo; nada foi perdido.';
+    }).then(function () { btn.disabled = !CA_GRAVACAO; btn.textContent = 'Enviar'; });
+  });
+  function limparForm(tipo) {
+    var f = $('f-' + tipo), tag = f.querySelector('[data-tag-info]').value;
+    f.querySelectorAll('input:not([type=checkbox]), textarea').forEach(function (i) { if (!i.matches('[data-tag-info]') && i.type !== 'date') i.value = ''; });
+    f.querySelectorAll('input[type=checkbox]').forEach(function (i) { i.checked = false; i.dispatchEvent(new Event('change')); });
+    f.querySelectorAll('[data-opcoes]').forEach(function (el) { valorChips(el, el.dataset.padrao || ''); });
+    if (tipo === 'atividade') { $('a-bobinas').value = '1'; atualizarAtividade(); }
+    if (tipo === 'inspecao') $('i-insp').value = sessao.nome || '';
+    if (tipo === 'trecho') { $('t-lista').replaceChildren(); resumoTrechos(); }
+    f.querySelector('[data-tag-info]').value = tag;
+  }
+  function enviar(corpo) {
+    return fetch(CA_GRAVACAO, {method: 'POST', body: JSON.stringify(corpo), redirect: 'follow'})
+      .then(function (r) { if (!r.ok) throw new Error('o servidor respondeu ' + r.status + '.'); return r.json(); });
+  }
+  function historico(p, id) {
+    var h = guarda.get('ca_hist') || [];
+    h.unshift({quando: new Date().toLocaleString('pt-BR', {dateStyle: 'short', timeStyle: 'short'}), resumo: p.resumo, id: id});
+    guarda.set('ca_hist', h.slice(0, 30));
+    desenharHist();
+  }
+  function desenharHist() {
+    var h = guarda.get('ca_hist') || [], ul = $('hist'); ul.replaceChildren();
+    if (!h.length) { var li = document.createElement('li'); li.textContent = 'Nenhum envio ainda.'; ul.append(li); return; }
+    h.forEach(function (x) { var li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('b'), c = document.createElement('code'); b.textContent = x.resumo; a.append(b, document.createElement('br'), x.quando); c.textContent = x.id; li.append(a, c); ul.append(li); });
+  }
+  var tmAviso = null;
+  function aviso(msg, falha) {
+    var t = $('toast'); t.textContent = msg; t.className = 'lf-toast lf-show ' + (falha ? 'lf-falha' : 'lf-ok');
+    clearTimeout(tmAviso); tmAviso = setTimeout(function () { t.className = 'lf-toast'; }, 3800);
+  }
+
+  /* ---------- PIN ---------- */
+  var sessao = guarda.get('ca_sessao') || {};
+  function entrou() {
+    $('entrar').hidden = true; $('app').hidden = false;
+    $('quem').textContent = sessao.nome || '—';
+    if (!$('i-insp').value) $('i-insp').value = sessao.nome || '';
+  }
+  $('form-pin').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var pin = $('pin').value.trim();
+    $('pin-erro').textContent = '';
+    if (!pin) { $('pin-erro').textContent = 'Digite o PIN.'; return; }
+    if (!CA_GRAVACAO) { sessao = {pin: pin, nome: 'modo de teste (sem gravação)'}; entrou(); return; }
+    $('pin-btn').disabled = true; $('pin-btn').textContent = 'Conferindo…';
+    enviar({pin: pin, acao: 'quem'}).then(function (r) {
+      if (!r.ok) throw new Error(r.erro || 'PIN não reconhecido.');
+      sessao = {pin: pin, nome: r.nome}; guarda.set('ca_sessao', sessao); $('pin').value = ''; entrou();
+    }).catch(function (e) { $('pin-erro').textContent = e.message + ' Confira o PIN e a internet.'; })
+      .then(function () { $('pin-btn').disabled = false; $('pin-btn').textContent = 'Entrar'; });
+  });
+  $('trocar').addEventListener('click', function () { guarda.del('ca_sessao'); sessao = {}; $('app').hidden = true; $('entrar').hidden = false; $('pin').focus(); });
+
+  $('sem-gravacao').hidden = !!CA_GRAVACAO;
+  if (sessao.pin && (sessao.nome || !CA_GRAVACAO)) entrou();
+  atualizarAtividade();
+  desenharHist();
+  carregarCadastro();
+})();
+</script>
+</body>
+</html>
