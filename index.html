@@ -1,0 +1,1453 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Correias Alfa 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+/* Substitui o ambiente do Claude: lê as abas publicadas da planilha e redesenha a página. */
+(function () {
+  var FONTES = {
+    atividades: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2cDDTQq8AKKFN5pThZjstkB1glE1c14aqlK2m-n92Uv2JsR4i6yo59SxFP3HGSZ5Sr68KX5FNCOKj/pub?gid=1267231826&single=true&output=csv',
+    especificacao: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2cDDTQq8AKKFN5pThZjstkB1glE1c14aqlK2m-n92Uv2JsR4i6yo59SxFP3HGSZ5Sr68KX5FNCOKj/pub?gid=812110065&single=true&output=csv'
+  };
+  var PADRAO = {planta: '', carc: '', prog: '', ativ: '', motivo: '', mes: '', equip: '', metrica: 'intervencoes', rank: 'intervencoes', ord: 'trocas', busca: ''};
+  var loaders = {}, calcs = [], draws = [], ouvintes = [], estado = {};
+  var params = Object.assign({}, PADRAO);
+  var feitos = new WeakMap();
+  var agendado = false;
+
+  function data(id) {
+    return estado[id] || {status: 'loading', data: calcs.some(function (c) { return c.id === id; }) ? null : []};
+  }
+  function recalcular() {
+    calcs.forEach(function (c) {
+      var ins = c.inputs.map(data);
+      if (ins.some(function (x) { return x.status === 'loading'; })) { estado[c.id] = {status: 'loading', data: null}; return; }
+      if (ins.some(function (x) { return x.status !== 'ok'; })) { estado[c.id] = {status: 'error', data: null}; return; }
+      try { estado[c.id] = {status: 'ok', data: c.fn.apply(null, ins.map(function (x) { return x.data; }))}; }
+      catch (e) { console.error('cálculo', c.id, e); estado[c.id] = {status: 'error', data: null, message: String(e)}; }
+    });
+  }
+  function desenhar() {
+    ouvintes.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
+    draws.forEach(function (d) {
+      document.querySelectorAll('[data-draw="' + d.name + '"]').forEach(function (el) {
+        if (el.closest('[hidden]')) return;
+        try {
+          if (d.fn) { d.fn(el); return; }
+          if (!feitos.has(el)) { el.replaceChildren(); feitos.set(el, d.mount ? d.mount(el) : undefined); }
+          if (d.update) d.update(el, feitos.get(el));
+        } catch (e) { console.error('desenho', d.name, e); }
+      });
+    });
+  }
+  function agenda() {
+    if (agendado) return;
+    agendado = true;
+    requestAnimationFrame(function () { agendado = false; desenhar(); });
+  }
+  function sincronia(texto, erro) {
+    var t = document.getElementById('sync-txt');
+    if (t) t.textContent = texto;
+    var s = document.getElementById('sincronia');
+    if (s) s.classList.toggle('ca-sync-erro', !!erro);
+  }
+  function carregar() {
+    sincronia('Lendo a planilha…');
+    var ids = Object.keys(FONTES);
+    return Promise.all(ids.map(function (id) {
+      return fetch(FONTES[id] + '&_=' + Date.now(), {cache: 'no-store'})
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(function (texto) {
+          var r = loaders[id] ? loaders[id]({answer: texto}) : texto;
+          estado[id] = {status: 'ok', data: (r && r.rows) || r};
+        })
+        .catch(function (e) { console.error('fonte', id, e); estado[id] = {status: 'error', data: [], message: String(e)}; });
+    })).then(function () {
+      recalcular();
+      agenda();
+      var falhou = ids.some(function (id) { return estado[id].status !== 'ok'; });
+      var h = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+      sincronia(falhou ? 'Não foi possível ler a planilha. Tente “Atualizar dados”.' : 'Dados da planilha lidos às ' + h, falhou);
+    });
+  }
+
+  window.dash = {
+    loader: function (id, o) { loaders[id] = o.fn; },
+    calc: function (id, o) { calcs.push({id: id, inputs: o.inputs, fn: o.fn}); },
+    data: data,
+    params: function () { return Object.assign({}, params); },
+    setParams: function (o) {
+      Object.keys(o).forEach(function (k) { params[k] = o[k] == null ? (k in PADRAO ? PADRAO[k] : '') : o[k]; });
+      recalcular(); agenda();
+    },
+    resetParams: function () { params = Object.assign({}, PADRAO); recalcular(); agenda(); },
+    onData: function (fn) { ouvintes.push(fn); },
+    draw: function (name, spec) { draws.push(typeof spec === 'function' ? {name: name, fn: spec} : Object.assign({name: name}, spec)); },
+    __iniciar: function () {
+      recalcular();
+      desenhar();
+      var b = document.getElementById('sync-btn');
+      if (b) b.addEventListener('click', carregar);
+      var tm = null;
+      window.addEventListener('resize', function () { clearTimeout(tm); tm = setTimeout(agenda, 120); });
+      carregar();
+    }
+  };
+})();
+</script>
+<style>
+:root { color-scheme: dark; --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif; }
+html, body { margin: 0; background: #080A0F; }
+body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
+.ca-sync { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12px; color: var(--fg-3); }
+.ca-sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-teal); }
+.ca-sync.ca-sync-erro { color: var(--c-emer); }
+.ca-sync.ca-sync-erro .ca-sync-dot { background: var(--c-emer); }
+.ca-sync .ca-ghost { height: 26px; }
+.dash-skeleton { position: relative; color: transparent !important; }
+.dash-skeleton::after { content: ""; position: absolute; inset: 2px 0; border-radius: 8px; background: linear-gradient(90deg, rgba(255,255,255,.035), rgba(255,255,255,.09), rgba(255,255,255,.035)); background-size: 200% 100%; animation: ca-shim 1.2s linear infinite; }
+@keyframes ca-shim { to { background-position: -200% 0; } }
+
+
+/* Layout: faixa escura de ponta a ponta, herói, doca de filtros fixa, grade de cartões, gráficos animados, tabelas com barras de dados */
+#dash-root { --dash-gutter: 0; }
+.ca {
+  --ink-0: #080A0F; --ink-1: #0E121A; --ink-2: #151B26; --ink-3: #1C2433;
+  --line: rgba(160,174,200,.10); --line-2: rgba(160,174,200,.22);
+  --fg: #EDF1F7; --fg-2: #A3ADBF; --fg-3: #6E788C;
+  --c-accent: #7CC4FF; --c-accent-dim: rgba(124,196,255,.26); --c-teal: #39D5B8;
+  --c-prog: #5B8CFF; --c-oport: #39D5B8; --c-corr: #FFB547; --c-emer: #FF5C7A;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.2,.7,.2,1);
+  color-scheme: dark;
+  container-type: inline-size;
+  position: relative; isolation: isolate;
+  display: flex; flex-direction: column; gap: 28px;
+  padding-block: 36px 56px; padding-inline: clamp(16px, 4vw, 48px);
+  background:
+    radial-gradient(900px 420px at 8% -8%, rgba(91,140,255,.16), transparent 62%),
+    radial-gradient(700px 360px at 100% 0%, rgba(57,213,184,.09), transparent 60%),
+    var(--ink-0);
+  color: var(--fg); font-family: var(--font-anthropic-sans); font-size: 14px; line-height: 1.5;
+}
+.ca *, .ca *::before, .ca *::after { box-sizing: border-box; }
+.ca button { font: inherit; color: inherit; }
+.ca :focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+/* Herói */
+.ca-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 20px 32px; }
+.ca-hero { display: flex; flex-direction: column; gap: 14px; max-width: 980px; flex: 1 1 520px; min-width: 0; }
+.ca-client { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding: 14px 18px; border-radius: 14px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.01)); }
+.ca-client img { display: block; height: 30px; width: auto; max-width: 100%; }
+.ca-client-l { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3); }
+.ca-client-u { font-size: 12px; color: var(--fg-2); }
+.ca-client-r { margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--line); align-self: stretch; text-align: right; font-size: 11px; color: var(--fg-3); }
+.ca-client-r b { color: var(--fg-2); font-weight: 500; }
+.ca-team { margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.ca-team div { display: flex; align-items: baseline; gap: 8px; }
+.ca-team dt { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3); }
+.ca-team dd { margin: 0; font-size: 13px; color: var(--fg-2); }
+.ca-eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--fg-2); }
+.ca-live { width: 8px; height: 8px; border-radius: 50%; background: var(--c-teal); box-shadow: 0 0 0 0 rgba(57,213,184,.5); }
+.ca-hero h1 { margin: 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(2.3rem, 5.4vw, 3.9rem); line-height: 1.02; letter-spacing: -.02em; text-wrap: balance; }
+.ca-belt { display: flex; align-items: center; gap: 0; width: min(260px, 60%); height: 14px; }
+.ca-belt i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-2); flex: none; }
+.ca-belt span { flex: 1; height: 6px; margin: 0 -1px; border-radius: 3px; background: repeating-linear-gradient(90deg, rgba(124,196,255,.55) 0 14px, rgba(124,196,255,.12) 14px 24px); }
+.ca-sub { margin: 0; color: var(--fg-2); }
+.ca-sub b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+.ca-take { margin: 0; font-size: clamp(1rem, 1.6vw, 1.15rem); line-height: 1.6; color: var(--fg-2); max-width: 70ch; }
+.ca-take b { color: var(--fg); font-weight: 500; }
+.ca-take .ca-hl { color: var(--c-accent); }
+
+/* Doca de filtros ativos */
+/* Duas colunas: filtros fixos à esquerda, conteúdo à direita */
+.ca-layout { display: grid; grid-template-columns: 292px minmax(0, 1fr); gap: 24px; align-items: start; }
+.ca-side { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.ca-side .ca-filters { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.ca-brand { flex: none; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 20px 16px; border-radius: 18px; border: 1px solid var(--line); background: radial-gradient(240px 120px at 30% 40%, rgba(29,95,180,.22), transparent 70%), linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.012)); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+.ca-brand img { display: block; width: 100%; max-width: 236px; height: auto; }
+.ca-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.ca-dock { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; padding: 10px 14px; border-radius: 14px; background: rgba(8,10,15,.80); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); border: 1px solid var(--line); }
+.ca-dock-in { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 32px; }
+.ca-count { font-size: 13px; color: var(--fg-2); white-space: nowrap; }
+.ca-count b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 15px; }
+.ca-sep { width: 1px; height: 18px; background: var(--line-2); }
+.ca-none { color: var(--fg-3); font-size: 13px; }
+.ca-tags { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.ca-tag { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px 0 10px; border-radius: 999px; border: 1px solid rgba(124,196,255,.4); background: rgba(124,196,255,.10); font-size: 12px; cursor: pointer; animation: ca-pop .28s var(--ease) both; transition: background .2s, border-color .2s; }
+.ca-tag:hover { background: rgba(124,196,255,.18); border-color: rgba(124,196,255,.7); }
+.ca-x { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,.08); font-size: 12px; line-height: 1; }
+
+/* Painel de filtros */
+.ca-panel { background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)); border: 1px solid var(--line); border-radius: 18px; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.ca-filters { padding: 18px 16px; display: flex; flex-direction: column; gap: 18px; }
+.ca-fhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.ca-h { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-2); }
+.ca-frow { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ca-flabel { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-3); }
+.ca-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; min-height: 32px; }
+.ca-side .ca-search { max-width: none; }
+.ca-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.025); color: var(--fg-2); cursor: pointer; font-size: 13px; white-space: nowrap; transition: background .2s, border-color .2s, color .2s, box-shadow .25s, transform .15s; }
+.ca-chip:hover { border-color: var(--line-2); color: var(--fg); background: rgba(255,255,255,.05); }
+.ca-chip:active { transform: scale(.97); }
+.ca-chip[aria-pressed="true"] { color: #fff; border-color: rgba(124,196,255,.65); background: rgba(124,196,255,.14); box-shadow: 0 0 0 3px rgba(124,196,255,.10), 0 6px 18px -8px rgba(124,196,255,.55); }
+.ca-chip.ca-zero { opacity: .38; }
+.ca-chip .ca-n { font-family: var(--mono); font-size: 11px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.ca-chip[aria-pressed="true"] .ca-n { color: var(--c-accent); }
+.ca-dotc { width: 8px; height: 8px; border-radius: 50%; }
+.ca-search { position: relative; max-width: 360px; }
+.ca-input { width: 100%; height: 36px; padding: 0 12px 0 34px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.03); color: var(--fg); font: inherit; font-size: 13px; transition: border-color .2s, box-shadow .2s; }
+.ca-input::placeholder { color: var(--fg-3); }
+.ca-input:focus { outline: none; border-color: rgba(124,196,255,.6); box-shadow: 0 0 0 3px rgba(124,196,255,.12); }
+.ca-search::before { content: ""; position: absolute; left: 12px; top: 50%; width: 11px; height: 11px; margin-top: -7px; border: 1.6px solid var(--fg-3); border-radius: 50%; }
+.ca-search::after { content: ""; position: absolute; left: 22px; top: 50%; width: 5px; height: 1.6px; margin-top: 3px; background: var(--fg-3); transform: rotate(45deg); }
+.ca-ghost { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg-2); cursor: pointer; font-size: 12px; transition: color .2s, border-color .2s, background .2s; }
+.ca-ghost:hover:not(:disabled) { color: var(--fg); border-color: var(--line-2); background: rgba(255,255,255,.04); }
+.ca-ghost:disabled { opacity: .35; cursor: default; }
+
+/* Indicadores */
+.ca-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.ca-card { --mx: 50%; --my: 0%; position: relative; overflow: hidden; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; background: radial-gradient(260px 160px at var(--mx) var(--my), rgba(124,196,255,.09), transparent 70%), linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.012)); border: 1px solid var(--line); border-radius: 18px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); transition: border-color .25s, transform .25s var(--ease); }
+.ca-card:hover { border-color: var(--line-2); transform: translateY(-2px); }
+.ca-klabel { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3); }
+.ca-kval { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(2rem, 3.4vw, 2.6rem); line-height: 1.05; letter-spacing: -.01em; font-variant-numeric: tabular-nums; min-height: 1.05em; }
+.ca-kval small { font-size: .45em; color: var(--fg-3); margin-left: 4px; font-family: var(--font-anthropic-sans); letter-spacing: 0; }
+.ca-knote { font-size: 12px; color: var(--fg-3); }
+.ca-knote b { color: var(--fg-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.ca-spark { height: 40px; margin-top: auto; }
+.ca-spark svg, .ca-gauge svg { display: block; overflow: visible; }
+.ca-kflex { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.ca-gauge { width: 112px; height: 62px; flex: none; }
+.ca-halo { transform-box: fill-box; transform-origin: center; }
+
+/* Seções e gráficos */
+.ca-sec { padding: 20px 20px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ca-sechead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; }
+.ca-sechead h2 { margin: 0; font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
+.ca-hint { margin: 2px 0 0; font-size: 12px; color: var(--fg-3); max-width: 75ch; }
+.ca-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+.ca-seg button { height: 28px; padding: 0 12px; border-radius: 7px; border: 0; background: transparent; color: var(--fg-3); cursor: pointer; font-size: 12px; transition: background .2s, color .2s; }
+.ca-seg button:hover { color: var(--fg); }
+.ca-seg button[aria-pressed="true"] { background: rgba(255,255,255,.10); color: var(--fg); box-shadow: 0 1px 0 rgba(255,255,255,.06) inset; }
+.ca-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--fg-2); }
+.ca-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.ca-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.ca-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.ca-chart { position: relative; min-height: 280px; }
+.ca-chart.ca-mid { min-height: 200px; }
+.ca-chart svg { display: block; overflow: visible; }
+.ca-axis text, .ca-lbl { fill: var(--fg-3); font-size: 11px; font-family: var(--font-anthropic-sans); }
+.ca-lbl { fill: var(--fg-2); font-size: 12px; }
+.ca-row.ca-on .ca-lbl { fill: #fff; font-weight: 600; }
+.ca-axis path, .ca-axis line { stroke: var(--line); }
+.ca-gridl line { stroke: var(--line); stroke-dasharray: 2 4; }
+.ca-val { fill: var(--fg); font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ca-track { fill: rgba(255,255,255,.035); }
+.ca-row { cursor: pointer; }
+.ca-row rect.ca-seg-r, .ca-col rect { transition: opacity .3s; }
+.ca-row.ca-dim rect.ca-seg-r, .ca-row.ca-dim .ca-val, .ca-dimc { opacity: .28; }
+.ca-hit { fill: transparent; cursor: pointer; }
+.ca-hit:hover { fill: rgba(255,255,255,.035); }
+.ca-tt { position: absolute; z-index: 6; pointer-events: none; min-width: 150px; padding: 10px 12px; border-radius: 12px; background: rgba(17,22,31,.94); border: 1px solid var(--line-2); box-shadow: 0 18px 40px -12px rgba(0,0,0,.7); backdrop-filter: blur(8px); font-size: 12px; color: var(--fg); opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; }
+.ca-tt.ca-show { opacity: 1; transform: none; }
+.ca-tt .ca-tt-h { font-weight: 600; margin-bottom: 6px; }
+.ca-tt .ca-tt-r { display: flex; justify-content: space-between; gap: 16px; color: var(--fg-2); }
+.ca-tt .ca-tt-r b { color: var(--fg); font-family: var(--mono); font-weight: 500; }
+.ca-tt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.ca-empty { color: var(--fg-3); font-size: 13px; padding: 24px 0; }
+
+/* Tabelas */
+.ca-tablewrap { overflow-x: auto; margin-inline: -4px; }
+.ca-scroll { max-height: 560px; overflow: auto; border-radius: 12px; border: 1px solid var(--line); }
+.ca-table { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; font-size: 13px; }
+.ca-table th { position: sticky; top: 0; z-index: 1; background: var(--ink-1); text-align: left; font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-3); padding: 10px 12px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+.ca-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; color: var(--fg-2); }
+.ca-table td:first-child { color: var(--fg); }
+.ca-table .ca-num { text-align: right; }
+.ca-table tbody tr { transition: background .2s; }
+.ca-table tbody tr:hover td { background: rgba(255,255,255,.03); }
+.ca-table tbody tr.ca-click { cursor: pointer; }
+.ca-table tbody tr.ca-sel td { background: rgba(124,196,255,.07); }
+.ca-tag-code { font-family: var(--mono); font-size: 12.5px; letter-spacing: .02em; }
+.ca-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.ca-sort::after { content: "↕"; opacity: .35; font-size: 10px; }
+.ca-sort[aria-pressed="true"] { color: var(--c-accent); }
+.ca-sort[aria-pressed="true"]::after { content: "↓"; opacity: 1; }
+.ca-bar-cell { position: relative; min-width: 120px; }
+.ca-dbar { position: absolute; left: 12px; bottom: 5px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--c-teal), var(--c-accent)); transition: width .6s var(--ease); }
+.ca-muted { color: var(--fg-3) !important; }
+.ca-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.ca-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ca-p-PROGRAMADO { color: var(--c-prog); }
+.ca-p-OPORTUNIDADE { color: var(--c-oport); }
+.ca-p-CORRETIVA { color: var(--c-corr); }
+.ca-p-EMERGENCIA { color: var(--c-emer); }
+.ca-nospec { display: flex; flex-wrap: wrap; gap: 8px; }
+.ca-nospec .ca-chip { font-family: var(--mono); font-size: 12px; }
+.ca-foot { color: var(--fg-3); font-size: 13px; }
+.ca-foot summary { cursor: pointer; color: var(--fg-2); }
+.ca-foot ul { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; max-width: 85ch; line-height: 1.55; }
+.ca-cred { align-self: stretch; margin: 0; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 5px; }
+.ca-cred div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; }
+.ca-cred dd { margin-left: auto; }
+.ca-cred dt { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-3); }
+.ca-cred dd { margin: 0; font-size: 12px; color: var(--fg-2); text-align: right; }
+[data-dash-source-state=refreshing] { opacity: .5; }
+
+@keyframes ca-pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes ca-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes ca-run { to { background-position: 24px 0; } }
+@keyframes ca-ping { 0% { box-shadow: 0 0 0 0 rgba(57,213,184,.55); } 80%, 100% { box-shadow: 0 0 0 9px rgba(57,213,184,0); } }
+@keyframes ca-halo { 0% { opacity: .55; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.9); } }
+@keyframes ca-rowin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  .ca-rise { animation: ca-rise .75s var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
+  .ca-belt span { animation: ca-run 1.4s linear infinite; }
+  .ca-live { animation: ca-ping 2.2s ease-out infinite; }
+  .ca-halo { animation: ca-halo 2.4s ease-out infinite; }
+  .ca-table tbody tr.ca-in { animation: ca-rowin .45s var(--ease) both; }
+}
+@media (prefers-reduced-motion: reduce) { .ca-tag { animation: none; } }
+@container (max-width: 860px) {
+  .ca-layout { grid-template-columns: minmax(0, 1fr); }
+  .ca-side { position: static; max-height: none; }
+  .ca-side .ca-filters { overflow: visible; }
+}
+@container (max-width: 640px) {
+  .ca-sec, .ca-filters { padding: 16px 14px; }
+  .ca-client { align-items: flex-start; }
+  .ca-client-r { text-align: left; }
+}
+</style>
+</head>
+<body>
+<div id="dash-root">
+
+<div class="ca" id="painel">
+  <div class="ca-top">
+  <header class="ca-hero ca-rise" id="topo" style="--i:0">
+    <div class="ca-eyebrow"><span class="ca-live" aria-hidden="true"></span>Alfa Transportadores · Relatório de inspeção</div>
+    <div class="ca-sync" id="sincronia"><span class="ca-sync-dot" aria-hidden="true"></span><span id="sync-txt">Lendo a planilha…</span><button type="button" class="ca-ghost" id="sync-btn">Atualizar dados</button></div>
+    <h1>Correias Alfa 2026</h1>
+    <div class="ca-belt" aria-hidden="true"><i></i><span></span><i></i></div>
+    <p class="ca-sub">Registros de <b data-draw="periodo-ini" data-source="base" data-field="data">—</b> a <b data-draw="periodo-fim" data-source="base" data-field="data">—</b>, com cada intervenção ligada à especificação da sua correia.</p>
+    <p class="ca-take" id="resumo">Com os filtros atuais são <b data-draw="kpi" data-k="intervencoes" data-source="kpis" data-field="intervencoes" data-row="0">—</b> intervenções, e <b class="ca-hl" data-draw="kpi" data-k="pct_nao_planejadas" data-source="kpis" data-field="pct_nao_planejadas" data-row="0">—</b> delas foram não planejadas. O equipamento com mais intervenções é <b data-draw="top-eq" data-source="filtrado">—</b>, e a correia mais trocada é <b data-draw="top-troca" data-source="trocas" data-field="equipamento" data-row="0">—</b>.</p>
+    <dl class="ca-team" id="equipe">
+      <div><dt>Inspetor</dt><dd>Leonardo Caetano</dd></div>
+      <div><dt>Supervisor</dt><dd>Gustavo Luiz</dd></div>
+    </dl>
+  </header>
+  <div class="ca-client ca-rise" id="cliente" style="--i:1">
+    <span class="ca-client-l">Cliente</span>
+    <img src="assets/logo-eurochem.svg" alt="EuroChem" width="574" height="124">
+    <span class="ca-client-u">Unidade Serra do Salitre</span>
+    <span class="ca-client-r">Responsável: <b>Marcos Borges</b></span>
+  </div>
+  </div>
+
+  <div class="ca-layout">
+  <aside class="ca-side" id="lateral">
+  <div class="ca-brand ca-rise" id="logo" style="--i:1"><img src="assets/logo-alfa.png" alt="Alfa Transportadores" width="520" height="200">
+    <dl class="ca-cred" id="credito">
+      <div><dt>Painel</dt><dd>Renan · Eng. Mecânico</dd></div>
+    </dl>
+  </div>
+  <section class="ca-panel ca-filters ca-rise" id="filtros" style="--i:1" aria-label="Filtros">
+    <div class="ca-fhead">
+      <h2 class="ca-h">Filtros</h2>
+      <button type="button" class="ca-ghost ca-clear" id="limpar">Limpar tudo</button>
+    </div>
+    <div class="ca-frow"><span class="ca-flabel">Planta</span><div class="ca-chips" role="group" aria-label="Planta" data-draw="chips" data-param="planta" data-col="planta" data-source="base"></div></div>
+    <div class="ca-frow"><span class="ca-flabel">Carcaça</span><div class="ca-chips" role="group" aria-label="Tipo de carcaça" data-draw="chips" data-param="carc" data-col="tipo_carcaca" data-source="base"></div></div>
+    <div class="ca-frow"><span class="ca-flabel">Programação</span><div class="ca-chips" role="group" aria-label="Programação" data-draw="chips" data-param="prog" data-col="programacao" data-source="base"></div></div>
+    <div class="ca-frow"><span class="ca-flabel">Mês</span><div class="ca-chips" role="group" aria-label="Mês" data-draw="chips" data-param="mes" data-col="mes" data-source="base"></div></div>
+    <div class="ca-frow"><span class="ca-flabel">Motivo</span><div class="ca-chips" role="group" aria-label="Motivo" data-draw="chips" data-param="motivo" data-col="motivo" data-source="base"></div></div>
+    <div class="ca-frow"><span class="ca-flabel">Atividade</span><div class="ca-chips" role="group" aria-label="Atividade" data-draw="chips" data-param="ativ" data-col="atividade" data-source="base"></div></div>
+    <div class="ca-frow"><label class="ca-flabel" for="f-equip">Equipamento</label>
+      <div class="ca-search"><input class="ca-input" id="f-equip" list="l-equip" placeholder="Digite a TAG e tecle Enter, ex.: 430TP008" autocomplete="off"><datalist id="l-equip" data-draw="equip-list" data-source="base"></datalist></div>
+    </div>
+  </section>
+  </aside>
+
+  <main class="ca-main" id="conteudo">
+  <div class="ca-dock" id="ativos">
+    <div class="ca-dock-in">
+      <span class="ca-count"><b data-draw="kpi" data-k="intervencoes" data-source="kpis" data-field="intervencoes" data-row="0">—</b> intervenções</span>
+      <span class="ca-sep" aria-hidden="true"></span>
+      <span class="ca-none" id="sem-filtro">Nenhum filtro aplicado</span>
+      <div class="ca-tags" data-draw="ativos" data-source="base" aria-label="Filtros ativos"></div>
+      <button type="button" class="ca-ghost ca-clear" id="limpar-doca">Limpar</button>
+    </div>
+  </div>
+
+  <div class="ca-kpis" id="indicadores">
+    <div class="ca-card ca-rise" id="kpi-intervencoes" style="--i:2">
+      <span class="ca-klabel">Intervenções</span>
+      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="intervencoes" data-source="kpis" data-field="intervencoes" data-row="0">—</span>
+      <span class="ca-knote">em <b data-draw="kpi" data-k="equipamentos" data-source="kpis" data-field="equipamentos" data-row="0">—</b> equipamentos · por mês</span>
+      <div class="ca-spark" data-draw="spark" data-k="intervencoes" data-source="filtrado"></div>
+    </div>
+    <div class="ca-card ca-rise" id="kpi-horas" style="--i:3">
+      <span class="ca-klabel">Horas de intervenção</span>
+      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="horas" data-source="kpis" data-field="horas" data-row="0">—</span>
+      <span class="ca-knote">mais <b data-draw="kpi" data-k="sem_horas" data-source="kpis" data-field="sem_horas" data-row="0">—</b> sem horas lançadas · por mês</span>
+      <div class="ca-spark" data-draw="spark" data-k="horas" data-source="filtrado"></div>
+    </div>
+    <div class="ca-card ca-rise" id="kpi-trocas" style="--i:4">
+      <span class="ca-klabel">Correias substituídas</span>
+      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="substituicoes" data-source="kpis" data-field="substituicoes" data-row="0">—</span>
+      <span class="ca-knote">troca da correia inteira · por mês</span>
+      <div class="ca-spark" data-draw="spark" data-k="substituicoes" data-source="filtrado"></div>
+    </div>
+    <div class="ca-card ca-rise" id="kpi-metros" style="--i:5">
+      <span class="ca-klabel">Metros de correia trocados</span>
+      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="metros_substituidos" data-source="kpis" data-field="metros_substituidos" data-row="0">—</span>
+      <span class="ca-knote"><b data-draw="kpi" data-k="subst_sem_metros" data-source="kpis" data-field="subst_sem_metros" data-row="0">—</b> trocas sem metragem cadastrada · por mês</span>
+      <div class="ca-spark" data-draw="spark" data-k="metros" data-source="filtrado"></div>
+    </div>
+    <div class="ca-card ca-rise" id="kpi-nao-planejadas" style="--i:6">
+      <span class="ca-klabel">Não planejadas</span>
+      <div class="ca-kflex">
+        <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="pct_nao_planejadas" data-source="kpis" data-field="pct_nao_planejadas" data-row="0">—</span>
+        <div class="ca-gauge" data-draw="gauge" data-source="kpis"></div>
+      </div>
+      <span class="ca-knote"><b data-draw="kpi" data-k="nao_planejadas" data-source="kpis" data-field="nao_planejadas" data-row="0">—</b> corretivas ou emergências</span>
+    </div>
+  </div>
+
+  <section class="ca-panel ca-sec ca-rise" id="por-mes" style="--i:7">
+    <div class="ca-sechead">
+      <div>
+        <h2>Evolução mensal</h2>
+        <p class="ca-hint">Clique nas colunas para filtrar um ou mais meses.</p>
+      </div>
+      <div class="ca-seg" role="group" aria-label="Medida do gráfico mensal">
+        <button type="button" data-seg="metrica" data-v="intervencoes">Intervenções</button>
+        <button type="button" data-seg="metrica" data-v="horas">Horas</button>
+        <button type="button" data-seg="metrica" data-v="metros">Metros trocados</button>
+      </div>
+    </div>
+    <div class="ca-legend">
+      <span><i class="ca-sw" style="background:var(--c-prog)"></i>Programado</span>
+      <span><i class="ca-sw" style="background:var(--c-oport)"></i>Oportunidade</span>
+      <span><i class="ca-sw" style="background:var(--c-corr)"></i>Corretiva</span>
+      <span><i class="ca-sw" style="background:var(--c-emer)"></i>Emergência</span>
+    </div>
+    <div class="ca-chart" data-draw="mes" data-source="filtrado base"></div>
+  </section>
+
+  <section class="ca-panel ca-sec ca-rise" id="equipamentos" style="--i:8">
+    <div class="ca-sechead">
+      <div>
+        <h2>Ranking de equipamentos</h2>
+        <p class="ca-hint">Os 15 primeiros com os filtros atuais. Clique numa barra para isolar o equipamento.</p>
+      </div>
+      <div class="ca-seg" role="group" aria-label="Ordenar ranking por">
+        <button type="button" data-seg="rank" data-v="intervencoes">Intervenções</button>
+        <button type="button" data-seg="rank" data-v="metros">Metros trocados</button>
+        <button type="button" data-seg="rank" data-v="horas">Horas</button>
+      </div>
+    </div>
+    <div class="ca-legend" id="legenda-rank">
+      <span><i class="ca-sw" style="background:var(--c-accent)"></i>Substituição da correia</span>
+      <span><i class="ca-sw" style="background:var(--c-accent-dim)"></i>Outras intervenções</span>
+    </div>
+    <div class="ca-chart" data-draw="top-equip" data-source="filtrado"></div>
+  </section>
+
+  <div class="ca-grid2">
+    <section class="ca-panel ca-sec ca-rise" id="motivos" style="--i:9">
+      <div class="ca-sechead"><h2>Motivo</h2></div>
+      <div class="ca-chart ca-mid" data-draw="motivo" data-source="filtrado"></div>
+    </section>
+    <section class="ca-panel ca-sec ca-rise" id="atividades-tipo" style="--i:10">
+      <div class="ca-sechead"><h2>Tipo de atividade</h2></div>
+      <div class="ca-chart ca-mid" data-draw="ativ" data-source="filtrado"></div>
+    </section>
+  </div>
+
+  <section class="ca-panel ca-sec ca-rise" id="trocas" style="--i:11">
+    <div class="ca-sechead">
+      <div>
+        <h2>Trocas de correia por equipamento</h2>
+        <p class="ca-hint">Cada substituição é a troca da correia inteira, com o comprimento da especificação. Intervalo médio da primeira à última troca. Clique no cabeçalho para ordenar e na linha para filtrar.</p>
+      </div>
+    </div>
+    <div class="ca-tablewrap">
+      <table class="ca-table" data-source="trocas" data-row-key="equipamento">
+        <thead><tr>
+          <th data-field="equipamento">Equipamento</th>
+          <th data-field="planta">Planta</th>
+          <th data-field="trocas" class="ca-num"><button type="button" class="ca-sort" data-ord="trocas">Trocas</button></th>
+          <th data-field="metros_correia" class="ca-num">Metros/correia</th>
+          <th data-field="metros_total"><button type="button" class="ca-sort" data-ord="metros">Metros trocados</button></th>
+          <th data-field="largura_pol" class="ca-num">Largura</th>
+          <th data-field="carcaca">Carcaça</th>
+          <th data-field="sap">Código SAP</th>
+          <th data-field="ultima_troca"><button type="button" class="ca-sort" data-ord="ultima">Última troca</button></th>
+          <th data-field="intervalo_medio_dias" class="ca-num"><button type="button" class="ca-sort" data-ord="intervalo">Intervalo médio</button></th>
+        </tr></thead>
+        <tbody data-draw="trocas-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="ca-grid2">
+    <section class="ca-panel ca-sec ca-rise" id="consumo-sap" style="--i:12">
+      <div class="ca-sechead">
+        <div>
+          <h2>Consumo por código SAP</h2>
+          <p class="ca-hint">Metros de correia trocados por código de material, para apoiar a reposição.</p>
+        </div>
+      </div>
+      <div class="ca-tablewrap">
+        <table class="ca-table" data-source="consumo_sap" data-row-key="sap">
+          <thead><tr>
+            <th data-field="sap">Código SAP</th>
+            <th data-field="larguras">Largura</th>
+            <th data-field="trocas" class="ca-num">Trocas</th>
+            <th data-field="metros_total">Metros trocados</th>
+          </tr></thead>
+          <tbody data-draw="sap-body"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="ca-panel ca-sec ca-rise" id="sem-especificacao" style="--i:13">
+      <div class="ca-sechead">
+        <div>
+          <h2>Sem especificação</h2>
+          <p class="ca-hint">Equipamentos com intervenção que não estão na planilha de especificação: sem metragem, largura ou código SAP. O número é a quantidade de intervenções.</p>
+        </div>
+      </div>
+      <div class="ca-nospec" data-draw="sem-spec" data-source="sem_spec"></div>
+    </section>
+  </div>
+
+  <section class="ca-panel ca-sec ca-rise" id="lista" style="--i:14">
+    <div class="ca-sechead">
+      <div>
+        <h2>Todas as intervenções</h2>
+        <p class="ca-hint">Mais recentes primeiro.</p>
+      </div>
+      <div class="ca-search" style="flex: 1 1 220px">
+        <input class="ca-input" id="busca" type="search" placeholder="Buscar na lista: TAG, atividade, motivo…" autocomplete="off" aria-label="Buscar na lista">
+      </div>
+    </div>
+    <div class="ca-scroll">
+      <table class="ca-table" data-source="filtrado" data-row-key="id">
+        <thead><tr>
+          <th data-field="data">Data</th>
+          <th data-field="equipamento">Equipamento</th>
+          <th data-field="planta">Planta</th>
+          <th data-field="atividade">Atividade</th>
+          <th data-field="tipo_reparo">Emenda / reparo</th>
+          <th data-field="programacao">Programação</th>
+          <th data-field="motivo">Motivo</th>
+          <th data-field="horas" class="ca-num">Horas</th>
+          <th data-field="metros_substituidos" class="ca-num">Metros trocados</th>
+        </tr></thead>
+        <tbody data-draw="lista-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <details class="ca-foot" id="como-calcula">
+    <summary>Como os números são calculados</summary>
+    <ul>
+      <li>As TAGs das duas planilhas são ligadas pela área e pelo número: 430TP009 corresponde a E89A-0430-TP-009. TAGs abreviadas ou com espaço sobrando (435TP04, "420TP013 ") são lidas como a TAG completa.</li>
+      <li>Tipo de carcaça: Cabo de aço quando a carcaça da especificação começa com ST seguido de número (ST500); Lona quando contém EP, PN (como PN2200), Poliester ou Nylon. Correias sem carcaça informada ou sem especificação não entram em nenhum dos dois botões.</li>
+      <li>Não planejadas são as intervenções com programação Corretiva ou Emergência.</li>
+      <li>Metros trocados soma o comprimento da correia inteira a cada Substituição. Trocas em equipamentos sem especificação contam como troca, mas sem metros.</li>
+      <li>Atividades marcadas como Parada anual não têm horas lançadas e ficam fora da soma de horas.</li>
+      <li>Dentro de um mesmo filtro, escolher mais de uma opção soma as opções. Filtros diferentes se combinam entre si. O número em cada botão mostra quantas intervenções ele traria com os outros filtros atuais.</li>
+      <li>Datas sem ano (05/08) foram lidas como 2026. A linha de 420TP06 sem data aparece como "Sem data" no filtro de mês.</li>
+      <li>A planta é a que está escrita na planilha de atividades. 230TP011 está como Ácidos, embora a área 230 seja da planta Mineral.</li>
+    </ul>
+  </details>
+  </main>
+  </div>
+</div>
+
+</div>
+<script>
+/* ---------- Leitura das planilhas ---------- */
+dash.loader('atividades', {
+  description: 'Lê o CSV, ignora linhas sem equipamento, padroniza a TAG (435TP04 vira 435TP004), converte a data para AAAA-MM-DD (sem ano = 2026) e as horas para número.',
+  fn: ({answer}) => {
+    const t = String(answer);
+    const csv = [];
+    let row = [], f = '', q = false;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); csv.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); csv.push(row); }
+    const txt = (v) => String(v == null ? '' : v).trim().toUpperCase();
+    const rows = [];
+    csv.slice(1).forEach((r, i) => {
+      const bruto = txt(r[0]);
+      if (!bruto) return;
+      const m = bruto.match(/^(\d{3})(TP|FLE)(\d+)([A-Z]?)$/);
+      const equipamento = m ? m[1] + m[2] + m[3].padStart(3, '0') + m[4] : bruto;
+      const d = String(r[4] || '').trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+      let data = null;
+      if (d) {
+        const y = !d[3] ? 2026 : d[3].length === 2 ? 2000 + Number(d[3]) : Number(d[3]);
+        data = y + '-' + d[2].padStart(2, '0') + '-' + d[1].padStart(2, '0');
+      }
+      const h = txt(r[5]);
+      const hn = Number(h.replace(',', '.'));
+      rows.push({
+        id: String(i + 2),
+        equipamento,
+        tag_original: String(r[0] || '').trim(),
+        planta: txt(r[1]),
+        atividade: txt(r[2]),
+        tipo_reparo: txt(r[3]),
+        data,
+        mes: data ? data.slice(0, 7) : '',
+        horas: h === '' || isNaN(hn) ? null : hn,
+        parada_anual: h === 'PARADA ANUAL',
+        programacao: txt(r[6]),
+        motivo: txt(r[7])
+      });
+    });
+    return {columns: ['id', 'equipamento', 'tag_original', 'planta', 'atividade', 'tipo_reparo', 'data', 'mes', 'horas', 'parada_anual', 'programacao', 'motivo'], rows};
+  }
+});
+
+dash.loader('especificacao', {
+  description: 'Lê o CSV de especificação e gera a TAG curta (E89A-0430-TP-009 vira 430TP009), a largura em polegadas e os metros como número.',
+  fn: ({answer}) => {
+    const t = String(answer);
+    const csv = [];
+    let row = [], f = '', q = false;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); csv.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); csv.push(row); }
+    const s = (v) => String(v == null ? '' : v).trim();
+    const rows = [];
+    csv.slice(1).forEach((r) => {
+      const tag = s(r[0]).toUpperCase();
+      const m = tag.match(/^E89([A-Z])-0?(\d{3})-TP-(\d{3})$/);
+      if (!m) return;
+      const pol = s(r[5]);
+      const pm = pol.match(/^(\d+)/);
+      const mt = Number(s(r[6]).replace(',', '.'));
+      rows.push({
+        equipamento: m[2] + 'TP' + m[3],
+        tag_spec: tag,
+        unidade: 'E89' + m[1],
+        area: m[2],
+        material: s(r[1]),
+        carcaca: s(r[2]),
+        lonas: s(r[3]),
+        cobertura: s(r[4]),
+        largura_pol: pm ? Number(pm[1]) : null,
+        metros: s(r[6]) === '' || isNaN(mt) ? null : mt,
+        sap: s(r[7]),
+        situacao: /DESATIVADA/i.test(pol) ? 'DESATIVADA' : 'ATIVA'
+      });
+    });
+    return {columns: ['equipamento', 'tag_spec', 'unidade', 'area', 'material', 'carcaca', 'lonas', 'cobertura', 'largura_pol', 'metros', 'sap', 'situacao'], rows};
+  }
+});
+
+/* ---------- Cálculos ---------- */
+dash.calc('base', {
+  title: 'Intervenções com a especificação da correia',
+  description: 'Cada intervenção com largura, carcaça, comprimento e código SAP da correia, ligados pela TAG.',
+  inputs: ['atividades', 'especificacao'],
+  fn: (atividades, especificacao) => {
+    const spec = new Map(especificacao.map((s) => [s.equipamento, s]));
+    return atividades.map((a) => {
+      const s = spec.get(a.equipamento);
+      const subst = a.atividade === 'SUBSTITUIR';
+      const carc = s ? String(s.carcaca || '').toUpperCase() : '';
+      const tipo_carcaca = /(^|[^A-Z])ST\s*\d/.test(carc) ? 'CABO DE AÇO'
+        : /EP|PN|POLIESTER|POLIÉSTER|NYLON/.test(carc) ? 'LONA' : '';
+      return Object.assign({}, a, {
+        tem_spec: !!s,
+        tipo_carcaca,
+        tag_spec: s ? s.tag_spec : '',
+        largura_pol: s ? s.largura_pol : null,
+        carcaca: s ? s.carcaca : '',
+        material: s ? s.material : '',
+        metros_correia: s ? s.metros : null,
+        sap: s ? s.sap : '',
+        substituicao: subst,
+        metros_substituidos: subst && s && s.metros != null ? s.metros : (subst ? null : 0),
+        nao_planejada: a.programacao === 'CORRETIVA' || a.programacao === 'EMERGENCIA'
+      });
+    });
+  }
+});
+
+dash.calc('filtrado', {
+  title: 'Intervenções no filtro atual',
+  description: 'As intervenções que passam pelos filtros de planta, tipo de carcaça, programação, mês, motivo, atividade e equipamento. Várias opções no mesmo filtro se somam.',
+  inputs: ['base'],
+  fn: (base) => {
+    const p = dash.params();
+    const lista = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
+    const col = {planta: 'planta', carc: 'tipo_carcaca', prog: 'programacao', ativ: 'atividade', motivo: 'motivo', equip: 'equipamento'};
+    const regras = Object.keys(col).map((k) => [col[k], lista(p[k])]).filter((r) => r[1].length);
+    const meses = lista(p.mes);
+    return base.filter((r) =>
+      regras.every(([c, v]) => v.includes(r[c])) &&
+      (!meses.length || meses.includes(r.mes || 'sem')));
+  }
+});
+
+dash.calc('kpis', {
+  title: 'Indicadores do filtro atual',
+  description: 'Totais de intervenções, horas, trocas de correia, metros trocados e participação das não planejadas.',
+  inputs: ['filtrado'],
+  fn: (filtrado) => {
+    const n = filtrado.length;
+    const np = filtrado.filter((r) => r.nao_planejada).length;
+    const subs = filtrado.filter((r) => r.substituicao);
+    return [{
+      intervencoes: n,
+      equipamentos: new Set(filtrado.map((r) => r.equipamento)).size,
+      horas: filtrado.reduce((s, r) => s + (r.horas || 0), 0),
+      sem_horas: filtrado.filter((r) => r.horas == null).length,
+      substituicoes: subs.length,
+      metros_substituidos: subs.reduce((s, r) => s + (r.metros_substituidos || 0), 0),
+      subst_sem_metros: subs.filter((r) => r.metros_substituidos == null).length,
+      nao_planejadas: np,
+      pct_nao_planejadas: n ? Math.round(np / n * 1000) / 10 : 0
+    }];
+  }
+});
+
+dash.calc('trocas', {
+  title: 'Trocas de correia por equipamento',
+  description: 'Substituições agrupadas por equipamento, com metros trocados, última troca e intervalo médio entre trocas.',
+  inputs: ['filtrado'],
+  fn: (filtrado) => {
+    const g = new Map();
+    filtrado.filter((r) => r.substituicao).forEach((r) => {
+      if (!g.has(r.equipamento)) g.set(r.equipamento, []);
+      g.get(r.equipamento).push(r);
+    });
+    return Array.from(g, ([equipamento, rs]) => {
+      const datas = rs.map((r) => r.data).filter(Boolean).sort();
+      const r0 = rs[0];
+      const intervalo = datas.length >= 2
+        ? Math.round((Date.parse(datas[datas.length - 1]) - Date.parse(datas[0])) / 86400000 / (datas.length - 1))
+        : null;
+      return {
+        equipamento,
+        planta: r0.planta,
+        trocas: rs.length,
+        metros_correia: r0.metros_correia,
+        metros_total: r0.metros_correia == null ? null : rs.length * r0.metros_correia,
+        largura_pol: r0.largura_pol,
+        carcaca: r0.carcaca,
+        sap: r0.sap,
+        ultima_troca: datas.length ? datas[datas.length - 1] : null,
+        intervalo_medio_dias: intervalo
+      };
+    }).sort((a, b) => b.trocas - a.trocas || (b.metros_total || 0) - (a.metros_total || 0) || a.equipamento.localeCompare(b.equipamento));
+  }
+});
+
+dash.calc('consumo_sap', {
+  title: 'Consumo de correia por código SAP',
+  description: 'Metros de correia trocados somados por código de material SAP.',
+  inputs: ['trocas'],
+  fn: (trocas) => {
+    const g = new Map();
+    trocas.forEach((t) => {
+      const k = t.sap || 'SEM CÓDIGO';
+      if (!g.has(k)) g.set(k, {sap: k, larg: new Set(), trocas: 0, metros_total: 0, equipamentos: 0});
+      const o = g.get(k);
+      if (t.largura_pol != null) o.larg.add(t.largura_pol);
+      o.trocas += t.trocas;
+      o.metros_total += t.metros_total || 0;
+      o.equipamentos += 1;
+    });
+    return Array.from(g.values()).map((o) => ({
+      sap: o.sap,
+      larguras: Array.from(o.larg).sort((a, b) => a - b).map((l) => l + '"').join(' / '),
+      trocas: o.trocas,
+      metros_total: o.metros_total,
+      equipamentos: o.equipamentos
+    })).sort((a, b) => b.metros_total - a.metros_total || b.trocas - a.trocas);
+  }
+});
+
+dash.calc('sem_spec', {
+  title: 'Equipamentos sem especificação',
+  description: 'Equipamentos com intervenção no filtro atual que não aparecem na planilha de especificação.',
+  inputs: ['filtrado'],
+  fn: (filtrado) => {
+    const g = new Map();
+    filtrado.filter((r) => !r.tem_spec).forEach((r) => {
+      if (!g.has(r.equipamento)) g.set(r.equipamento, {equipamento: r.equipamento, planta: r.planta, intervencoes: 0});
+      g.get(r.equipamento).intervencoes += 1;
+    });
+    return Array.from(g.values()).sort((a, b) => b.intervencoes - a.intervencoes || a.equipamento.localeCompare(b.equipamento));
+  }
+});
+
+/* ---------- Apoio ---------- */
+const nf = new Intl.NumberFormat('pt-BR');
+const nf1 = new Intl.NumberFormat('pt-BR', {maximumFractionDigits: 1});
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const mesLabel = (m) => m && m !== 'sem' ? MESES[Number(m.slice(5, 7)) - 1] + '/' + m.slice(2, 4) : 'sem data';
+const dataBR = (d) => d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : '—';
+const cap = (v) => {
+  const map = {EMERGENCIA: 'Emergência', 'ÁCIDOS': 'Ácidos', 'MANUTENÇÃO': 'Manutenção', 'PREPARAÇÃO': 'Preparação', 'REPOSIÇÃO DE COBERTURA': 'Reposição de cobertura'};
+  if (map[v]) return map[v];
+  return v ? v.charAt(0) + v.slice(1).toLowerCase() : '';
+};
+const PROGS = ['PROGRAMADO', 'OPORTUNIDADE', 'CORRETIVA', 'EMERGENCIA'];
+const PROG_COR = {PROGRAMADO: 'var(--c-prog)', OPORTUNIDADE: 'var(--c-oport)', CORRETIVA: 'var(--c-corr)', EMERGENCIA: 'var(--c-emer)'};
+const progCor = (p) => PROG_COR[p] || 'var(--fg-3)';
+const FILTROS = ['planta', 'carc', 'prog', 'mes', 'motivo', 'ativ', 'equip'];
+const COLS = {planta: 'planta', carc: 'tipo_carcaca', prog: 'programacao', mes: 'mes', motivo: 'motivo', ativ: 'atividade', equip: 'equipamento'};
+const lista = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
+const reduz = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+const DUR = () => reduz() ? 0 : 700;
+let uid = 0;
+
+function valorCol(r, col) { return col === 'mes' ? (r.mes || 'sem') : r[col]; }
+function passa(r, p, exceto) {
+  return FILTROS.every((k) => {
+    if (k === exceto) return true;
+    const v = lista(p[k]);
+    return !v.length || v.includes(valorCol(r, COLS[k]));
+  });
+}
+function rotuloVal(k, v) {
+  if (k === 'mes') return v === 'sem' ? 'Sem data' : mesLabel(v);
+  if (k === 'equip') return v;
+  return cap(v);
+}
+function alterna(param, valor) {
+  const atual = lista(dash.params()[param]);
+  const novo = atual.includes(valor) ? atual.filter((x) => x !== valor) : atual.concat([valor]);
+  dash.setParams({[param]: novo.length ? novo : null});
+}
+function limparFiltros() {
+  const o = {};
+  FILTROS.forEach((k) => { o[k] = null; });
+  dash.setParams(o);
+}
+function normTag(s) {
+  const t = String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+  const m = t.match(/^(\d{3})(TP|FLE)(\d+)([A-Z]?)$/);
+  return m ? m[1] + m[2] + m[3].padStart(3, '0') + m[4] : t;
+}
+
+/* Ouvintes e estados dos controles fixos */
+document.querySelectorAll('.ca-clear').forEach((b) => b.addEventListener('click', limparFiltros));
+document.querySelectorAll('[data-seg]').forEach((b) => b.addEventListener('click', () => dash.setParams({[b.dataset.seg]: b.dataset.v})));
+document.querySelectorAll('.ca-sort').forEach((b) => b.addEventListener('click', () => dash.setParams({ord: b.dataset.ord})));
+document.querySelectorAll('.ca-card').forEach((c) => c.addEventListener('pointermove', (ev) => {
+  const r = c.getBoundingClientRect();
+  c.style.setProperty('--mx', (ev.clientX - r.left) + 'px');
+  c.style.setProperty('--my', (ev.clientY - r.top) + 'px');
+}));
+document.querySelectorAll('#f-equip').forEach((inp) => {
+  const aplicar = () => {
+    const tag = normTag(inp.value);
+    if (!tag) return;
+    const b = dash.data('base');
+    const existe = b.status === 'ok' && b.data.some((r) => r.equipamento === tag);
+    if (!existe) { inp.setAttribute('aria-invalid', 'true'); return; }
+    inp.removeAttribute('aria-invalid');
+    if (!lista(dash.params().equip).includes(tag)) alterna('equip', tag);
+    inp.value = '';
+  };
+  inp.addEventListener('change', aplicar);
+  inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') aplicar(); });
+});
+document.querySelectorAll('#busca').forEach((inp) => {
+  let tm = null;
+  inp.addEventListener('input', () => {
+    clearTimeout(tm);
+    tm = setTimeout(() => dash.setParams({busca: inp.value.trim() || null}), 180);
+  });
+});
+dash.onData(() => {
+  const p = dash.params();
+  const algum = FILTROS.some((k) => lista(p[k]).length);
+  document.querySelectorAll('.ca-clear').forEach((b) => { b.disabled = !algum; });
+  document.querySelectorAll('#sem-filtro').forEach((s) => { s.hidden = algum; });
+  const padrao = {metrica: 'intervencoes', rank: 'intervencoes'};
+  document.querySelectorAll('[data-seg]').forEach((b) => {
+    b.setAttribute('aria-pressed', String((p[b.dataset.seg] || padrao[b.dataset.seg]) === b.dataset.v));
+  });
+  document.querySelectorAll('.ca-sort').forEach((b) => b.setAttribute('aria-pressed', String((p.ord || 'trocas') === b.dataset.ord)));
+  document.querySelectorAll('#legenda-rank').forEach((l) => { l.hidden = (p.rank || 'intervencoes') !== 'intervencoes'; });
+});
+
+function estado(el, st) {
+  if (st.status === 'ok') { el.classList.remove('dash-skeleton'); return true; }
+  if (st.status === 'loading') { el.classList.add('dash-skeleton'); return false; }
+  el.classList.remove('dash-skeleton');
+  return false;
+}
+function vazio(el, msg) {
+  const d = document.createElement('div');
+  d.className = 'ca-empty';
+  d.textContent = msg;
+  el.appendChild(d);
+}
+function novaDica(el) {
+  const tt = document.createElement('div');
+  tt.className = 'ca-tt';
+  el.appendChild(tt);
+  return tt;
+}
+/* linhas: [titulo, [rotulo, valor, cor?], ...] */
+function dica(el, tt, ev, linhas) {
+  tt.replaceChildren();
+  linhas.forEach((l, i) => {
+    const d = document.createElement('div');
+    if (i === 0) { d.className = 'ca-tt-h'; d.textContent = l; }
+    else {
+      d.className = 'ca-tt-r';
+      const a = document.createElement('span');
+      if (l[2]) { const sw = document.createElement('i'); sw.style.background = l[2]; a.appendChild(sw); }
+      a.appendChild(document.createTextNode(l[0]));
+      const b = document.createElement('b');
+      b.textContent = l[1];
+      d.append(a, b);
+    }
+    tt.appendChild(d);
+  });
+  const [px, py] = d3.pointer(ev, el);
+  tt.classList.add('ca-show');
+  const w = tt.offsetWidth, h = tt.offsetHeight;
+  let left = px + 16;
+  if (left + w > el.clientWidth) left = px - w - 16;
+  tt.style.left = Math.max(0, left) + 'px';
+  tt.style.top = Math.max(0, Math.min(py - h / 2, el.clientHeight - h)) + 'px';
+}
+function escondeDica(tt) { tt.classList.remove('ca-show'); }
+
+/* ---------- Barras horizontais animadas ---------- */
+function hbarMount(el) {
+  el.replaceChildren();
+  const id = 'ca-g' + (++uid);
+  const svg = d3.select(el).append('svg').attr('role', 'img');
+  const lg = svg.append('defs').append('linearGradient').attr('id', id).attr('x1', 0).attr('x2', 1).attr('y1', 0).attr('y2', 0);
+  lg.append('stop').attr('offset', '0%').style('stop-color', 'var(--c-teal)');
+  lg.append('stop').attr('offset', '100%').style('stop-color', 'var(--c-accent)');
+  const g = svg.append('g');
+  return {svg, g, tt: novaDica(el), grad: 'url(#' + id + ')', vazio: null};
+}
+function hbarUpdate(el, m, itens, o) {
+  if (m.vazio) { m.vazio.remove(); m.vazio = null; }
+  if (!itens.length) {
+    m.g.selectAll('*').remove();
+    m.svg.attr('height', 0);
+    m.vazio = document.createElement('div');
+    m.vazio.className = 'ca-empty';
+    m.vazio.textContent = 'Nada para mostrar com os filtros atuais.';
+    el.appendChild(m.vazio);
+    return;
+  }
+  const W = el.clientWidth || 400, rowH = 30, H = itens.length * rowH;
+  m.svg.attr('width', '100%').attr('height', H).attr('viewBox', `0 0 ${W} ${H}`).attr('aria-label', o.aria);
+  const tmp = m.svg.append('text').attr('class', 'ca-lbl');
+  let lw = 0;
+  itens.forEach((d) => { tmp.text(o.rotulo(d.key)); lw = Math.max(lw, tmp.node().getComputedTextLength()); });
+  tmp.remove();
+  if (!lw) lw = d3.max(itens, (d) => o.rotulo(d.key).length) * 7;
+  const L = Math.min(Math.ceil(lw) + 14, W * 0.45);
+  const valW = d3.max(itens, (d) => o.fmt(d.total).length) * 7.5 + 14;
+  const max = d3.max(itens, (d) => d.total) || 1;
+  const x = d3.scaleLinear().domain([0, max]).range([0, Math.max(20, W - L - valW)]);
+  const t = d3.transition().duration(DUR()).ease(d3.easeCubicOut);
+  const sel = o.sel || [];
+  const rows = m.g.selectAll('g.ca-row').data(itens, (d) => d.key).join(
+    (enter) => {
+      const g = enter.append('g').attr('class', 'ca-row').attr('transform', (d, i) => `translate(0,${i * rowH})`).style('opacity', 0);
+      g.append('rect').attr('class', 'ca-track');
+      g.append('text').attr('class', 'ca-lbl');
+      g.append('g').attr('class', 'ca-segs');
+      g.append('text').attr('class', 'ca-val').attr('x', L + 8);
+      g.append('rect').attr('class', 'ca-hit');
+      return g;
+    },
+    (update) => update,
+    (exit) => exit.transition(t).style('opacity', 0).remove()
+  );
+  rows.attr('class', (d) => 'ca-row' + (sel.length && !sel.includes(d.key) ? ' ca-dim' : '') + (sel.includes(d.key) ? ' ca-on' : ''));
+  rows.transition(t).attr('transform', (d, i) => `translate(0,${i * rowH})`).style('opacity', 1);
+  rows.select('.ca-track').attr('x', L).attr('y', rowH / 2 - 6).attr('height', 12).attr('rx', 6).attr('width', x.range()[1]);
+  rows.select('.ca-lbl').attr('x', L - 12).attr('y', rowH / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text((d) => o.rotulo(d.key));
+  rows.select('.ca-segs').each(function (d) {
+    let acc = 0;
+    const segs = o.series.map((s) => { const v = d[s.key] || 0; const r = {key: s.key, x0: acc, v, cor: s.cor === 'grad' ? m.grad : s.cor}; acc += v; return r; });
+    d3.select(this).selectAll('rect').data(segs, (s) => s.key)
+      .join((e) => e.append('rect').attr('class', 'ca-seg-r').attr('x', L).attr('width', 0).attr('y', rowH / 2 - 6).attr('height', 12).attr('rx', 6))
+      .style('fill', (s) => s.cor)
+      .transition(t).attr('x', (s) => L + x(s.x0)).attr('width', (s) => Math.max(0, x(s.v)));
+  });
+  rows.select('.ca-val').attr('y', rowH / 2).attr('dy', '0.35em').text((d) => o.fmt(d.total))
+    .transition(t).attr('x', (d) => L + x(d.total) + 8);
+  rows.select('.ca-hit').attr('x', 0).attr('y', 0).attr('width', W).attr('height', rowH)
+    .on('mousemove', (ev, d) => dica(el, m.tt, ev, o.dica(d)))
+    .on('mouseleave', () => escondeDica(m.tt))
+    .on('click', (ev, d) => o.clique(d.key));
+}
+function hbarDraw(name, calcular) {
+  dash.draw(name, {
+    mount: hbarMount,
+    update: (el, m) => {
+      const st = dash.data('filtrado');
+      if (!estado(el, st)) { if (st.status !== 'loading') { m.g.selectAll('*').remove(); } return; }
+      const r = calcular(st.data, dash.params());
+      hbarUpdate(el, m, r.itens, r.o);
+    }
+  });
+}
+
+/* ---------- Desenhos ---------- */
+dash.draw('kpi', {
+  mount: () => ({v: null, raf: null}),
+  update: (el, m) => {
+    const k = dash.data('kpis');
+    if (m.raf) { cancelAnimationFrame(m.raf); m.raf = null; }
+    if (k.status !== 'ok' || !k.data || !k.data[0]) {
+      el.textContent = '—';
+      m.v = null;
+      if (k.status === 'loading' && el.classList.contains('ca-kval')) el.classList.add('dash-skeleton');
+      return;
+    }
+    el.classList.remove('dash-skeleton');
+    const key = el.dataset.k, v = Number(k.data[0][key]) || 0;
+    const pct = key === 'pct_nao_planejadas';
+    const dec = pct || key === 'horas' || key === 'metros_substituidos';
+    const f = (x) => (dec ? nf1.format(Math.round(x * 10) / 10) : nf.format(Math.round(x))) + (pct ? '%' : '');
+    const de = m.v == null ? 0 : m.v;
+    m.v = v;
+    if (reduz() || de === v) { el.textContent = f(v); return; }
+    const t0 = performance.now(), D = 900;
+    const passo = (agora) => {
+      const p = Math.min(1, (agora - t0) / D);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = f(de + (v - de) * e);
+      if (p < 1) m.raf = requestAnimationFrame(passo);
+      else { el.textContent = f(v); m.raf = null; }
+    };
+    m.raf = requestAnimationFrame(passo);
+  },
+  unmount: (el, m) => { if (m && m.raf) cancelAnimationFrame(m.raf); }
+});
+
+function periodo(el, fim) {
+  const b = dash.data('base');
+  if (b.status !== 'ok') { el.textContent = '—'; return; }
+  const ds = b.data.map((r) => r.data).filter(Boolean).sort();
+  el.textContent = ds.length ? dataBR(fim ? ds[ds.length - 1] : ds[0]) : '—';
+}
+dash.draw('periodo-ini', (el) => periodo(el, false));
+dash.draw('periodo-fim', (el) => periodo(el, true));
+
+dash.draw('top-eq', (el) => {
+  const f = dash.data('filtrado');
+  if (f.status !== 'ok') { el.textContent = '—'; return; }
+  const c = d3.rollups(f.data, (v) => v.length, (r) => r.equipamento).sort((a, b) => b[1] - a[1]);
+  el.textContent = c.length ? `${c[0][0]} (${c[0][1]})` : 'nenhum';
+});
+
+dash.draw('top-troca', (el) => {
+  const t = dash.data('trocas');
+  if (t.status !== 'ok') { el.textContent = '—'; return; }
+  const r = t.data[0];
+  el.textContent = r ? `${r.equipamento} (${r.trocas} ${r.trocas === 1 ? 'troca' : 'trocas'})` : 'nenhuma no filtro atual';
+});
+
+dash.draw('chips', (el) => {
+  const b = dash.data('base');
+  if (b.status !== 'ok') { el.replaceChildren(); return; }
+  const param = el.dataset.param, col = el.dataset.col;
+  const p = dash.params();
+  const sel = lista(p[param]);
+  const cont = d3.rollup(b.data.filter((r) => passa(r, p, param)), (v) => v.length, (r) => valorCol(r, col));
+  const total = d3.rollup(b.data, (v) => v.length, (r) => valorCol(r, col));
+  let vals = Array.from(total.keys()).filter((v) => v !== '' && v != null);
+  if (col === 'mes') vals.sort((a, c) => (a === 'sem') - (c === 'sem') || a.localeCompare(c));
+  else if (col === 'programacao') vals.sort((a, c) => (PROGS.indexOf(a) + 99 * (PROGS.indexOf(a) < 0)) - (PROGS.indexOf(c) + 99 * (PROGS.indexOf(c) < 0)));
+  else vals.sort((a, c) => total.get(c) - total.get(a) || a.localeCompare(c));
+  d3.select(el).selectAll('button.ca-chip').data(vals, (d) => d).join((enter) => {
+    const btn = enter.append('button').attr('type', 'button').attr('class', 'ca-chip');
+    if (col === 'programacao') btn.append('span').attr('class', 'ca-dotc').style('background', (d) => progCor(d));
+    btn.append('span').attr('class', 'ca-t').text((d) => rotuloVal(param, d));
+    btn.append('span').attr('class', 'ca-n');
+    return btn;
+  })
+    .attr('aria-pressed', (d) => String(sel.includes(d)))
+    .classed('ca-zero', (d) => !cont.get(d) && !sel.includes(d))
+    .on('click', (ev, d) => alterna(param, d))
+    .select('.ca-n').text((d) => nf.format(cont.get(d) || 0));
+});
+
+dash.draw('equip-list', (dl) => {
+  const b = dash.data('base');
+  const vals = b.status === 'ok' ? Array.from(new Set(b.data.map((r) => r.equipamento))).sort() : [];
+  dl.replaceChildren(...vals.map((v) => { const o = document.createElement('option'); o.value = v; return o; }));
+});
+
+dash.draw('ativos', (el) => {
+  const p = dash.params();
+  const itens = [];
+  FILTROS.forEach((k) => lista(p[k]).forEach((v) => itens.push([k, v])));
+  d3.select(el).selectAll('button.ca-tag').data(itens, (d) => d[0] + '|' + d[1]).join((enter) => {
+    const btn = enter.append('button').attr('type', 'button').attr('class', 'ca-tag');
+    btn.append('span').attr('class', 'ca-tag-t').text((d) => rotuloVal(d[0], d[1]));
+    btn.append('span').attr('class', 'ca-x').attr('aria-hidden', 'true').text('×');
+    return btn;
+  })
+    .attr('aria-label', (d) => 'Remover ' + rotuloVal(d[0], d[1]))
+    .on('click', (ev, d) => alterna(d[0], d[1]));
+});
+
+dash.draw('spark', {
+  mount: (el) => {
+    el.replaceChildren();
+    const id = 'ca-s' + (++uid);
+    const svg = d3.select(el).append('svg').attr('aria-hidden', 'true');
+    const lg = svg.append('defs').append('linearGradient').attr('id', id).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
+    lg.append('stop').attr('offset', '0%').style('stop-color', 'var(--c-accent)').style('stop-opacity', .32);
+    lg.append('stop').attr('offset', '100%').style('stop-color', 'var(--c-accent)').style('stop-opacity', 0);
+    const area = svg.append('path').attr('fill', 'url(#' + id + ')');
+    const line = svg.append('path').attr('fill', 'none').style('stroke', 'var(--c-accent)').attr('stroke-width', 1.6).attr('stroke-linejoin', 'round');
+    const halo = svg.append('circle').attr('class', 'ca-halo').attr('r', 5).style('fill', 'var(--c-accent)');
+    const dot = svg.append('circle').attr('r', 2.6).style('fill', 'var(--c-accent)');
+    return {svg, area, line, halo, dot};
+  },
+  update: (el, m) => {
+    const st = dash.data('filtrado'), b = dash.data('base');
+    if (st.status !== 'ok' || b.status !== 'ok') return;
+    const meses = Array.from(new Set(b.data.map((r) => r.mes).filter(Boolean))).sort();
+    const k = el.dataset.k;
+    const val = (r) => k === 'horas' ? (r.horas || 0) : k === 'metros' ? (r.metros_substituidos || 0) : k === 'substituicoes' ? (r.substituicao ? 1 : 0) : 1;
+    const por = d3.rollup(st.data.filter((r) => r.mes), (v) => d3.sum(v, val), (r) => r.mes);
+    const serie = meses.map((mm) => ({mes: mm, v: por.get(mm) || 0}));
+    const W = el.clientWidth || 200, H = 40;
+    m.svg.attr('width', '100%').attr('height', H).attr('viewBox', `0 0 ${W} ${H}`);
+    const x = d3.scalePoint().domain(meses).range([3, W - 5]);
+    const y = d3.scaleLinear().domain([0, d3.max(serie, (d) => d.v) || 1]).range([H - 2, 5]);
+    const t = d3.transition().duration(DUR()).ease(d3.easeCubicOut);
+    m.line.transition(t).attr('d', d3.line().x((d) => x(d.mes)).y((d) => y(d.v))(serie));
+    m.area.transition(t).attr('d', d3.area().x((d) => x(d.mes)).y0(H).y1((d) => y(d.v))(serie));
+    const u = serie[serie.length - 1];
+    if (u) { m.dot.transition(t).attr('cx', x(u.mes)).attr('cy', y(u.v)); m.halo.transition(t).attr('cx', x(u.mes)).attr('cy', y(u.v)); }
+  }
+});
+
+dash.draw('gauge', {
+  mount: (el) => {
+    el.replaceChildren();
+    const id = 'ca-q' + (++uid);
+    const svg = d3.select(el).append('svg').attr('viewBox', '0 0 112 62').attr('width', '100%').attr('height', 62).attr('aria-hidden', 'true');
+    const lg = svg.append('defs').append('linearGradient').attr('id', id).attr('x1', 0).attr('x2', 1).attr('y1', 0).attr('y2', 0);
+    lg.append('stop').attr('offset', '0%').style('stop-color', 'var(--c-corr)');
+    lg.append('stop').attr('offset', '100%').style('stop-color', 'var(--c-emer)');
+    const g = svg.append('g').attr('transform', 'translate(56,58)');
+    const arc = d3.arc().innerRadius(42).outerRadius(52).cornerRadius(5).startAngle(-Math.PI / 2);
+    g.append('path').attr('d', arc({endAngle: Math.PI / 2})).style('fill', 'rgba(255,255,255,.06)');
+    const val = g.append('path').attr('fill', 'url(#' + id + ')');
+    return {arc, val, a: -Math.PI / 2};
+  },
+  update: (el, m) => {
+    const k = dash.data('kpis');
+    if (k.status !== 'ok' || !k.data || !k.data[0]) return;
+    const pct = Math.max(0, Math.min(100, k.data[0].pct_nao_planejadas || 0));
+    const alvo = -Math.PI / 2 + Math.PI * pct / 100;
+    const de = m.a;
+    m.a = alvo;
+    m.val.transition().duration(DUR() + 200).ease(d3.easeCubicOut)
+      .attrTween('d', () => { const i = d3.interpolate(de, alvo); return (t) => m.arc({endAngle: i(t)}); });
+  }
+});
+
+dash.draw('mes', {
+  mount: (el) => {
+    el.replaceChildren();
+    const svg = d3.select(el).append('svg').attr('role', 'img');
+    const m = {svg, tt: null};
+    m.grid = svg.append('g').attr('class', 'ca-gridl');
+    m.ay = svg.append('g').attr('class', 'ca-axis');
+    m.ax = svg.append('g').attr('class', 'ca-axis');
+    m.bars = svg.append('g');
+    m.tot = svg.append('g');
+    m.hit = svg.append('g');
+    m.tt = novaDica(el);
+    return m;
+  },
+  update: (el, m) => {
+    const st = dash.data('filtrado'), b = dash.data('base');
+    if (!estado(el, st) || b.status !== 'ok') return;
+    const p = dash.params();
+    const met = p.metrica || 'intervencoes';
+    const val = (r) => met === 'horas' ? (r.horas || 0) : met === 'metros' ? (r.metros_substituidos || 0) : 1;
+    const fmt = met === 'intervencoes' ? (v) => nf.format(v) : (v) => nf1.format(Math.round(v * 10) / 10);
+    const unid = {intervencoes: 'intervenções', horas: 'h', metros: 'm'}[met];
+    const meses = Array.from(new Set(b.data.map((r) => r.mes).filter(Boolean))).sort();
+    const sel = lista(p.mes);
+    const dados = meses.map((mm) => {
+      const o = {mes: mm, total: 0};
+      PROGS.forEach((k) => { o[k] = 0; });
+      st.data.forEach((r) => { if (r.mes === mm) { const v = val(r); if (PROGS.includes(r.programacao)) o[r.programacao] += v; o.total += v; } });
+      return o;
+    });
+    const W = el.clientWidth || 600, H = 280, M = {t: 26, r: 6, b: 28, l: 44};
+    m.svg.attr('width', '100%').attr('height', H).attr('viewBox', `0 0 ${W} ${H}`)
+      .attr('aria-label', 'Evolução mensal por tipo de programação, medida em ' + unid);
+    const x = d3.scaleBand().domain(meses).range([M.l, W - M.r]).padding(0.28);
+    const y = d3.scaleLinear().domain([0, d3.max(dados, (d) => d.total) || 1]).nice(4).range([H - M.b, M.t]);
+    const t = d3.transition().duration(DUR()).ease(d3.easeCubicOut);
+    m.grid.selectAll('line').data(y.ticks(4), (d) => d).join(
+      (e) => e.append('line').attr('x1', M.l).attr('x2', W - M.r).attr('y1', y(0)).attr('y2', y(0)).style('opacity', 0),
+      (u) => u,
+      (x0) => x0.transition(t).style('opacity', 0).remove()
+    ).attr('x1', M.l).attr('x2', W - M.r).transition(t).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).style('opacity', 1);
+    m.ay.attr('transform', `translate(${M.l - 8},0)`).transition(t)
+      .call(d3.axisLeft(y).ticks(4).tickSize(0).tickFormat((v) => nf.format(v)))
+      .call((g) => g.select('.domain').remove());
+    const passo = Math.max(1, Math.ceil(40 / x.step()));
+    m.ax.attr('transform', `translate(0,${H - M.b + 8})`)
+      .call(d3.axisBottom(x).tickSize(0).tickFormat((mm, i) => i % passo === 0 ? mesLabel(mm) : ''))
+      .call((g) => g.select('.domain').remove());
+    const pilha = d3.stack().keys(PROGS)(dados);
+    const camadas = m.bars.selectAll('g.ca-col').data(pilha, (d) => d.key).join('g').attr('class', 'ca-col').style('fill', (d) => progCor(d.key));
+    camadas.selectAll('rect').data((d) => d.map((s) => ({mes: s.data.mes, y0: s[0], y1: s[1]})), (d) => d.mes)
+      .join((e) => e.append('rect').attr('x', (d) => x(d.mes)).attr('width', x.bandwidth()).attr('y', y(0)).attr('height', 0))
+      .attr('class', (d) => sel.length && !sel.includes(d.mes) ? 'ca-dimc' : '')
+      .transition(t)
+      .attr('x', (d) => x(d.mes)).attr('width', x.bandwidth())
+      .attr('y', (d) => y(d.y1)).attr('height', (d) => Math.max(0, y(d.y0) - y(d.y1) - (d.y1 > d.y0 ? 1 : 0)));
+    m.tot.selectAll('text').data(dados, (d) => d.mes)
+      .join((e) => e.append('text').attr('class', 'ca-val').attr('text-anchor', 'middle').attr('y', y(0) - 6))
+      .text((d) => d.total ? fmt(d.total) : '')
+      .attr('class', (d) => 'ca-val' + (sel.length && !sel.includes(d.mes) ? ' ca-dimc' : ''))
+      .transition(t).attr('x', (d) => x(d.mes) + x.bandwidth() / 2).attr('y', (d) => y(d.total) - 7);
+    m.hit.selectAll('rect').data(dados, (d) => d.mes).join('rect').attr('class', 'ca-hit')
+      .attr('x', (d) => x(d.mes) - (x.step() - x.bandwidth()) / 2).attr('width', x.step())
+      .attr('y', M.t - 20).attr('height', H - M.b - M.t + 20).attr('rx', 6)
+      .on('mousemove', (ev, d) => dica(el, m.tt, ev, [mesLabel(d.mes) + ' · ' + fmt(d.total) + ' ' + unid]
+        .concat(PROGS.filter((k) => d[k]).map((k) => [cap(k), fmt(d[k]), progCor(k)]))))
+      .on('mouseleave', () => escondeDica(m.tt))
+      .on('click', (ev, d) => alterna('mes', d.mes));
+  }
+});
+
+hbarDraw('top-equip', (rows, p) => {
+  const rank = p.rank || 'intervencoes';
+  const itens = d3.rollups(rows, (v) => {
+    const s = v.filter((r) => r.substituicao).length;
+    const metros = d3.sum(v, (r) => r.metros_substituidos || 0);
+    const horas = d3.sum(v, (r) => r.horas || 0);
+    const o = {n: v.length, s, metros, horas, planta: v[0].planta, comp: v[0].metros_correia};
+    if (rank === 'metros') { o.a = metros; o.b = 0; o.total = metros; }
+    else if (rank === 'horas') { o.a = horas; o.b = 0; o.total = horas; }
+    else { o.a = s; o.b = v.length - s; o.total = v.length; }
+    return o;
+  }, (r) => r.equipamento).map(([key, o]) => Object.assign({key}, o))
+    .filter((d) => d.total > 0)
+    .sort((a, b) => b.total - a.total || b.n - a.n || a.key.localeCompare(b.key)).slice(0, 15);
+  const fmt = rank === 'intervencoes' ? (v) => nf.format(v) : (v) => nf1.format(Math.round(v * 10) / 10) + (rank === 'metros' ? ' m' : ' h');
+  return {itens, o: {
+    aria: 'Ranking dos equipamentos por ' + {intervencoes: 'intervenções', metros: 'metros de correia trocados', horas: 'horas de intervenção'}[rank],
+    rotulo: (k) => k,
+    fmt,
+    series: rank === 'intervencoes' ? [{key: 'a', cor: 'var(--c-accent)'}, {key: 'b', cor: 'var(--c-accent-dim)'}] : [{key: 'a', cor: 'grad'}, {key: 'b', cor: 'var(--c-accent-dim)'}],
+    sel: lista(p.equip),
+    dica: (d) => [d.key + ' · ' + cap(d.planta), ['Intervenções', nf.format(d.n)], ['Substituições', nf.format(d.s), 'var(--c-accent)'],
+      ['Metros trocados', nf1.format(d.metros) + ' m'], ['Horas', nf1.format(d.horas) + ' h'],
+      ['Comprimento da correia', d.comp != null ? nf1.format(d.comp) + ' m' : 'sem especificação']],
+    clique: (k) => alterna('equip', k)
+  }};
+});
+
+function porColuna(colName, param, aria) {
+  return (rows, p) => {
+    const itens = d3.rollups(rows, (v) => ({a: v.length, total: v.length, horas: d3.sum(v, (r) => r.horas || 0), np: v.filter((r) => r.nao_planejada).length}), (r) => r[colName] || '(em branco)')
+      .map(([key, o]) => Object.assign({key}, o)).sort((a, b) => b.total - a.total);
+    return {itens, o: {
+      aria, rotulo: cap, fmt: (v) => nf.format(v),
+      series: [{key: 'a', cor: 'grad'}],
+      sel: lista(p[param]),
+      dica: (d) => [cap(d.key), ['Intervenções', nf.format(d.total)], ['Não planejadas', nf.format(d.np), 'var(--c-emer)'], ['Horas lançadas', nf1.format(d.horas) + ' h']],
+      clique: (k) => alterna(param, k)
+    }};
+  };
+}
+hbarDraw('motivo', porColuna('motivo', 'motivo', 'Intervenções por motivo'));
+hbarDraw('ativ', porColuna('atividade', 'ativ', 'Intervenções por tipo de atividade'));
+
+function celula(tr, texto, cls) {
+  const td = tr.insertCell();
+  td.textContent = texto;
+  if (cls) td.className = cls;
+  return td;
+}
+function linhaVazia(tb, n, msg) {
+  const tr = tb.insertRow();
+  const td = celula(tr, msg, 'ca-muted');
+  td.colSpan = n;
+}
+function entra(tr, i) {
+  tr.classList.add('ca-in');
+  tr.style.animationDelay = Math.min(i * 22, 360) + 'ms';
+}
+/* Tabelas só se refazem quando os dados ou a escolha mudam; uma mudança de largura sozinha não as redesenha */
+function tabela(nome, chave, desenhar) {
+  dash.draw(nome, {
+    mount: () => ({k: null}),
+    update: (tb, m) => {
+      const k = chave();
+      if (k === m.k) return;
+      m.k = k;
+      tb.replaceChildren();
+      desenhar(tb);
+    }
+  });
+}
+
+tabela('trocas-body', () => {
+  const st = dash.data('trocas'), p = dash.params();
+  return st.status + '|' + (p.ord || '') + '|' + lista(p.equip).join(',') + '|' + (st.status === 'ok' ? JSON.stringify(st.data) : '');
+}, (tb) => {
+  const st = dash.data('trocas');
+  if (st.status !== 'ok') return;
+  if (!st.data.length) { linhaVazia(tb, 10, 'Nenhuma substituição com os filtros atuais.'); return; }
+  const p = dash.params();
+  const ord = p.ord || 'trocas';
+  const sel = lista(p.equip);
+  const rows = st.data.slice();
+  if (ord === 'metros') rows.sort((a, b) => (b.metros_total || 0) - (a.metros_total || 0) || b.trocas - a.trocas);
+  else if (ord === 'ultima') rows.sort((a, b) => (b.ultima_troca || '').localeCompare(a.ultima_troca || ''));
+  else if (ord === 'intervalo') rows.sort((a, b) => (a.intervalo_medio_dias == null) - (b.intervalo_medio_dias == null) || (a.intervalo_medio_dias || 0) - (b.intervalo_medio_dias || 0));
+  const maxM = d3.max(rows, (r) => r.metros_total || 0) || 1;
+  rows.forEach((r, i) => {
+    const tr = tb.insertRow();
+    tr.dataset.key = r.equipamento;
+    tr.className = 'ca-click' + (sel.includes(r.equipamento) ? ' ca-sel' : '');
+    entra(tr, i);
+    tr.onclick = () => alterna('equip', r.equipamento);
+    celula(tr, r.equipamento, 'ca-tag-code');
+    celula(tr, cap(r.planta));
+    celula(tr, nf.format(r.trocas), 'ca-num');
+    celula(tr, r.metros_correia != null ? nf1.format(r.metros_correia) : '—', 'ca-num' + (r.metros_correia == null ? ' ca-muted' : ''));
+    const td = celula(tr, r.metros_total != null ? nf1.format(r.metros_total) : '—', 'ca-bar-cell' + (r.metros_total == null ? ' ca-muted' : ''));
+    if (r.metros_total) {
+      const bar = document.createElement('span');
+      bar.className = 'ca-dbar';
+      bar.style.width = `calc((100% - 24px) * ${r.metros_total / maxM})`;
+      td.appendChild(bar);
+    }
+    celula(tr, r.largura_pol != null ? r.largura_pol + '"' : '—', 'ca-num');
+    celula(tr, r.carcaca || '—', r.carcaca ? '' : 'ca-muted');
+    celula(tr, r.sap || '—', 'ca-tag-code' + (r.sap ? '' : ' ca-muted'));
+    celula(tr, dataBR(r.ultima_troca));
+    celula(tr, r.intervalo_medio_dias != null ? nf.format(r.intervalo_medio_dias) + ' dias' : '—', 'ca-num' + (r.intervalo_medio_dias == null ? ' ca-muted' : ''));
+  });
+});
+
+tabela('sap-body', () => {
+  const st = dash.data('consumo_sap');
+  return st.status + '|' + (st.status === 'ok' ? JSON.stringify(st.data) : '');
+}, (tb) => {
+  const st = dash.data('consumo_sap');
+  if (st.status !== 'ok') return;
+  if (!st.data.length) { linhaVazia(tb, 4, 'Nenhuma substituição com os filtros atuais.'); return; }
+  const maxM = d3.max(st.data, (r) => r.metros_total) || 1;
+  st.data.forEach((r, i) => {
+    const tr = tb.insertRow();
+    tr.dataset.key = r.sap;
+    entra(tr, i);
+    celula(tr, r.sap, 'ca-tag-code');
+    celula(tr, r.larguras || '—', r.larguras ? '' : 'ca-muted');
+    celula(tr, nf.format(r.trocas), 'ca-num');
+    const td = celula(tr, nf1.format(r.metros_total), 'ca-bar-cell');
+    if (r.metros_total) {
+      const bar = document.createElement('span');
+      bar.className = 'ca-dbar';
+      bar.style.width = `calc((100% - 24px) * ${r.metros_total / maxM})`;
+      td.appendChild(bar);
+    }
+  });
+});
+
+dash.draw('sem-spec', (el) => {
+  const st = dash.data('sem_spec');
+  if (st.status !== 'ok') { el.replaceChildren(); return; }
+  const sel = lista(dash.params().equip);
+  el.querySelectorAll('.ca-empty').forEach((e) => e.remove());
+  d3.select(el).selectAll('button.ca-chip').data(st.data, (d) => d.equipamento).join((enter) => {
+    const b = enter.append('button').attr('type', 'button').attr('class', 'ca-chip');
+    b.append('span').attr('class', 'ca-t').text((d) => d.equipamento);
+    b.append('span').attr('class', 'ca-n');
+    return b;
+  })
+    .attr('aria-pressed', (d) => String(sel.includes(d.equipamento)))
+    .attr('title', (d) => cap(d.planta))
+    .on('click', (ev, d) => alterna('equip', d.equipamento))
+    .select('.ca-n').text((d) => nf.format(d.intervencoes));
+  if (!st.data.length) vazio(el, 'Todos os equipamentos do filtro atual têm especificação.');
+});
+
+tabela('lista-body', () => {
+  const st = dash.data('filtrado');
+  return st.status + '|' + String(dash.params().busca || '') + '|' + (st.status === 'ok' ? st.data.map((r) => r.id).join(',') : '');
+}, (tb) => {
+  const st = dash.data('filtrado');
+  if (st.status !== 'ok') return;
+  const busca = String(dash.params().busca || '').trim().toUpperCase();
+  let rows = st.data;
+  if (busca) {
+    const tagB = normTag(busca);
+    rows = rows.filter((r) => [r.equipamento, r.atividade, r.motivo, r.tipo_reparo, r.planta, r.programacao].some((v) => String(v || '').includes(busca) || String(v || '').includes(tagB)));
+  }
+  if (!rows.length) { linhaVazia(tb, 9, 'Nenhuma intervenção encontrada.'); return; }
+  rows = rows.slice().sort((a, b) => (b.data || '').localeCompare(a.data || '') || Number(b.id) - Number(a.id));
+  rows.forEach((r, i) => {
+    const tr = tb.insertRow();
+    tr.dataset.key = r.id;
+    if (i < 30) entra(tr, i);
+    celula(tr, dataBR(r.data), r.data ? '' : 'ca-muted');
+    celula(tr, r.equipamento, 'ca-tag-code');
+    celula(tr, cap(r.planta));
+    celula(tr, cap(r.atividade));
+    celula(tr, r.tipo_reparo ? cap(r.tipo_reparo) : '—', r.tipo_reparo ? '' : 'ca-muted');
+    const tdp = tr.insertCell();
+    const pill = document.createElement('span');
+    pill.className = 'ca-pill ca-p-' + r.programacao;
+    pill.textContent = cap(r.programacao);
+    tdp.appendChild(pill);
+    celula(tr, cap(r.motivo));
+    celula(tr, r.horas != null ? nf1.format(r.horas) : (r.parada_anual ? 'Parada anual' : '—'), 'ca-num' + (r.horas == null ? ' ca-muted' : ''));
+    celula(tr, r.substituicao ? (r.metros_substituidos != null ? nf1.format(r.metros_substituidos) : 'sem espec.') : '', 'ca-num' + (r.metros_substituidos == null ? ' ca-muted' : ''));
+  });
+});
+</script>
+<script>dash.__iniciar();</script>
+</body>
+</html>
