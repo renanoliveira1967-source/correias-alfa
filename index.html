@@ -15,21 +15,184 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script>
-/* Substitui o ambiente do Claude: lê as abas publicadas da planilha e redesenha a página. */
+
+/* ===== Fontes de dados: abas publicadas da planilha do Google (Arquivo > Compartilhar > Publicar na Web > CSV) ===== */
+var CA_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2cDDTQq8AKKFN5pThZjstkB1glE1c14aqlK2m-n92Uv2JsR4i6yo59SxFP3HGSZ5Sr68KX5FNCOKj/pub?single=true&output=csv&gid=';
+var CA_FONTES = [
+  {id: 'atividades', nome: 'ATIVIDADES 2026', gid: '1267231826', dev: 'atividades.csv'},
+  {id: 'especificacao', nome: 'ESPECIFICAÇÃO', gid: '812110065', dev: 'especificacao.csv'},
+  {id: 'condicao', nome: 'Condição atual', gid: '1114046089', dev: 'condicao.csv'},
+  {id: 'equipamento', tag: '220TP003', nome: '220TP003', gid: '69770680', dev: '220TP003.csv'},
+  {id: 'equipamento', tag: '150TP004', nome: '150TP004', gid: '875471775', dev: '150TP004.csv'}
+];
+
+/* ===== Leitura e limpeza (as planilhas são lidas pelo nome das colunas, não pela posição) ===== */
+var CA = window.CA = {};
+CA.csv = function (t) {
+  var out = [], row = [], f = '', q = false;
+  t = String(t || '');
+  for (var i = 0; i < t.length; i++) {
+    var c = t[i];
+    if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); out.push(row); row = []; f = ''; }
+    else f += c;
+  }
+  if (f !== '' || row.length) { row.push(f); out.push(row); }
+  return out;
+};
+CA.semAcento = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); };
+CA.txt = function (v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().toUpperCase(); };
+CA.num = function (s) {
+  s = String(s == null ? '' : s).trim().replace(/\s/g, '').replace(/MM$|M$/i, '');
+  if (!s) return null;
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(',', '.');
+  var n = Number(s);
+  return isNaN(n) ? null : n;
+};
+CA.data = function (s) {
+  s = String(s || '').trim().replace(/\/+/g, '/');
+  var m = s.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?$/);
+  if (!m) return null;
+  var d = Number(m[1]), mo = Number(m[2]);
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  var y = !m[3] ? 2026 : m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+};
+CA.semAno = function (s) { return /^\d{1,2}[\/-]\d{1,2}$/.test(String(s || '').trim()); };
+CA.dias = function (a, b) { return Math.round((Date.parse(a) - Date.parse(b)) / 86400000); };
+CA.tag = function (s) {
+  var t = CA.txt(s).replace(/\s+/g, '');
+  var m = t.match(/^E89[A-Z]-0?(\d{3})-TP-(\d{3})$/);
+  if (m) return m[1] + 'TP' + m[2];
+  m = t.match(/^(\d{3})(TP|FLE)(\d+)([A-Z]?)$/);
+  return m ? m[1] + m[2] + m[3].padStart(3, '0') + m[4] : t;
+};
+CA.tagValida = function (t) { return /^\d{3}(TP|FLE)\d{3}[A-Z]?$/.test(t); };
+CA.planta = function (tag) { var a = String(tag).charAt(0); return a === '1' || a === '2' ? 'MINERAL' : a === '3' ? 'ÁCIDOS' : a === '4' ? 'FERTILIZANTES' : ''; };
+CA.tipoCarcaca = function (c) {
+  c = CA.semAcento(c);
+  if (/(^|[^A-Z])ST\s*\d/.test(c)) return 'CABO DE AÇO';
+  if (/EP|PN|PL\s*\d|NN\s*\d|MB\s*\d|POLIESTER|NYLON/.test(c)) return 'LONA';
+  return '';
+};
+CA.cabecalho = function (rows, testa) {
+  for (var i = 0; i < rows.length; i++) {
+    var h = rows[i].map(CA.semAcento);
+    if (testa(h)) {
+      return {i: i, h: h, col: function () {
+        var nomes = Array.prototype.slice.call(arguments), j, k;
+        for (k = 0; k < nomes.length; k++) { j = this.h.indexOf(nomes[k]); if (j >= 0) return j; }
+        for (k = 0; k < nomes.length; k++) { for (j = 0; j < this.h.length; j++) if (this.h[j].indexOf(nomes[k]) === 0) return j; }
+        return -1;
+      }};
+    }
+  }
+  return null;
+};
+CA.cel = function (r, j) { return j >= 0 && r[j] != null ? String(r[j]) : ''; };
+
+CA.lerAtividades = function (rows, origem) {
+  var c = CA.cabecalho(rows, function (h) { return h.indexOf('EQUIPAMENTO') >= 0 && h.indexOf('ATIVIDADE') >= 0; });
+  if (!c) return [];
+  var j = {eq: c.col('EQUIPAMENTO'), pl: c.col('PLANTA'), at: c.col('ATIVIDADE'), tp: c.col('TIPO DE EMENDA OU REPARO', 'TIPO DE EMENDA'),
+    dt: c.col('DATA'), h: c.col('DURACAO EM HORAS', 'DURACAO'), pg: c.col('PROGRAMACAO'), si: c.col('SITUACAO'), mo: c.col('MOTIVO'), ob: c.col('OBS', 'OBSERVACAO')};
+  var out = [];
+  for (var i = c.i + 1; i < rows.length; i++) {
+    var r = rows[i], bruto = CA.cel(r, j.eq).trim();
+    if (!bruto) continue;
+    var tag = CA.tag(bruto);
+    if (!CA.tagValida(tag)) continue;
+    var dtx = CA.cel(r, j.dt).trim(), data = CA.data(dtx), h = CA.txt(CA.cel(r, j.h));
+    out.push({
+      id: origem + ':' + (i + 1), origem: origem, linha: i + 1, equipamento: tag, tag_original: bruto,
+      planta: CA.txt(CA.cel(r, j.pl)) || CA.planta(tag), atividade: CA.txt(CA.cel(r, j.at)), tipo_reparo: CA.txt(CA.cel(r, j.tp)),
+      data: data, data_texto: dtx, mes: data ? data.slice(0, 7) : '', horas: h === '' ? null : CA.num(h), parada_anual: h === 'PARADA ANUAL',
+      programacao: CA.txt(CA.cel(r, j.pg)), situacao: CA.txt(CA.cel(r, j.si)), motivo: CA.txt(CA.cel(r, j.mo)), obs: CA.cel(r, j.ob).trim()
+    });
+  }
+  return out;
+};
+
+CA.lerEspecificacao = function (rows) {
+  var c = CA.cabecalho(rows, function (h) { return h.indexOf('EQUIPAMENTO') >= 0 && h.some(function (x) { return x.indexOf('CODIGO SAP') === 0; }); });
+  if (!c) return [];
+  var j = {eq: c.col('EQUIPAMENTO'), mat: c.col('MATERIAL TRANSPORTADO'), ca: c.col('TIPO DE CARCACA'), lo: c.col('LONAS'), co: c.col('TIPO DA COBERTURA'), po: c.col('POLEGADA'), m: c.col('METROS'), sap: c.col('CODIGO SAP')};
+  var out = [];
+  for (var i = c.i + 1; i < rows.length; i++) {
+    var r = rows[i], tagL = CA.txt(CA.cel(r, j.eq)), m = tagL.match(/^E89([A-Z])-0?(\d{3})-TP-(\d{3})$/);
+    if (!m) continue;
+    var pol = CA.cel(r, j.po).trim(), pm = pol.match(/^(\d+)/);
+    out.push({equipamento: m[2] + 'TP' + m[3], tag_spec: tagL, material: CA.cel(r, j.mat).trim(), carcaca: CA.cel(r, j.ca).trim(),
+      lonas: CA.cel(r, j.lo).trim(), cobertura: CA.cel(r, j.co).trim(), largura_pol: pm ? Number(pm[1]) : null, metros: CA.num(CA.cel(r, j.m)),
+      sap: CA.cel(r, j.sap).trim(), desativada: /DESATIVADA/i.test(pol)});
+  }
+  return out;
+};
+
+CA.lerCondicao = function (rows) {
+  var c = CA.cabecalho(rows, function (h) { return h.some(function (x) { return x.indexOf('EQUIPAMENTO') === 0; }) && h.indexOf('SITUACAO') >= 0; });
+  if (!c) return [];
+  var j = {eq: c.col('EQUIPAMENTO'), re: c.col('RESPONSAVEL EUROCHEM', 'RESPONSAVEL'), pp: c.col('CORREIA PREPARADA'), rc: c.col('RECURSO NECESSARIO', 'RECURSO'),
+    la: c.col('LARGURA'), co: c.col('COMPRIMENTO'), de: c.col('DETALHES'), cb: c.col('COBERTURA'), es: c.col('ESPECIFICACAO'), si: c.col('SITUACAO'),
+    ob: c.col('OBS'), us: c.col('ULT. SUBSTITUICAO', 'ULT SUBSTITUICAO'), em: c.col('EMENDA')};
+  var out = [];
+  for (var i = c.i + 1; i < rows.length; i++) {
+    var r = rows[i], tag = CA.tag(CA.cel(r, j.eq));
+    if (!CA.tagValida(tag)) continue;
+    var si = CA.semAcento(CA.cel(r, j.si));
+    var situacao = si === 'CRITICO' ? 'CRÍTICO' : si === 'REGULAR' ? 'REGULAR' : (si === 'BOM' || si === 'OK') ? 'BOM' : 'SEM AVALIAÇÃO';
+    var es = CA.cel(r, j.es).trim();
+    out.push({equipamento: tag, planta: CA.planta(tag), responsavel: CA.cel(r, j.re).trim(), preparada: CA.txt(CA.cel(r, j.pp)), recursos: CA.cel(r, j.rc).trim(),
+      largura_pol: CA.num(CA.cel(r, j.la)), comprimento: CA.num(CA.cel(r, j.co)), medida: CA.txt(CA.cel(r, j.de)), cobertura: CA.cel(r, j.cb).trim(),
+      carcaca: es === '-' ? '' : es, situacao: situacao, obs: CA.cel(r, j.ob).trim(), ult_subst: CA.data(CA.cel(r, j.us)), emenda: CA.txt(CA.cel(r, j.em))});
+  }
+  return out;
+};
+
+CA.FABRICANTES = ['MERCURIO', 'METSO', 'BORPAC', 'FAGUNDES', 'CONTINENTAL', 'GOODYEAR', 'FENNER', 'SEMPERTRANS', 'FLEXSTEEL'];
+CA.lerEquipamento = function (rows, tag) {
+  var trechos = [];
+  var c = CA.cabecalho(rows, function (h) { return h.indexOf('TRECHO') >= 0 && h.indexOf('EMENDAS') >= 0; });
+  if (c) {
+    var j = {dt: c.col('DATA TRECHO'), tr: c.col('TRECHO'), pol: c.col('POL'), no: c.col('NOMECLATURA', 'NOMENCLATURA'), m: c.col('COMPRIMENTO(M)', 'COMPRIMENTO (M)', 'M', 'COMPRIMENTO'),
+      es: c.col('ESPESSURA'), em: c.col('EMENDAS'), ce: c.col('CENTRO DA CORREIA'), re: c.col('REPAROS'), sr: c.col('SITUACAO REPAROS'), bo: c.col('BORDAS'), sb: c.col('SITUACAO DAS BORDAS')};
+    var ok = function (v) { return /^(OK|N\/?A|NA|)$/.test(CA.semAcento(v)); };
+    for (var i = c.i + 1; i < rows.length; i++) {
+      var r = rows[i], nome = CA.cel(r, j.tr).replace(/\s+/g, ' ').trim();
+      if (nome.indexOf('/') < 0) { if (trechos.length) break; continue; }
+      var partes = nome.split(/\/+/).map(function (s) { return s.trim(); });
+      var dts = partes.map(function (p) { var m = p.match(/(\d{1,2})-(\d{1,2})-(\d{2})(?!\d)/); return m ? CA.data(m[1] + '/' + m[2] + '/' + m[3]) : null; });
+      var dInst = CA.data(CA.cel(r, j.dt));
+      if (!dInst && dts[0] && dts[1] && Math.abs(CA.dias(dts[0], dts[1])) <= 3) dInst = dts[0] > dts[1] ? dts[0] : dts[1];
+      var no = CA.semAcento(CA.cel(r, j.no)), fab = '';
+      CA.FABRICANTES.forEach(function (f) { if (!fab && no.indexOf(f) >= 0) fab = f; });
+      if (!fab) fab = (no.split(' ')[0] || '').replace(/[^A-Z]/g, '');
+      var cl = no.match(/ST\s*\d+/), cab = no.match(/(\d+)\s*CABOS/);
+      var t = {equipamento: tag, ordem: trechos.length + 1, nome: nome, inicio: partes[0], fim: partes[partes.length - 1], data_instalacao: dInst,
+        comprimento: CA.num(CA.cel(r, j.m)), espessura: CA.num(CA.cel(r, j.es)), largura_medida: CA.num(CA.cel(r, j.pol)), fabricante: fab || 'NÃO INFORMADO',
+        classe: cl ? cl[0].replace(/\s/g, '') : '', cabos: cab ? Number(cab[1]) : null,
+        centro: CA.cel(r, j.ce).trim(), emendas: CA.cel(r, j.em).trim(), bordas: CA.cel(r, j.bo).trim(), reparos: CA.cel(r, j.re).trim(),
+        situacao_reparos: CA.cel(r, j.sr).trim(), situacao_bordas: CA.cel(r, j.sb).trim()};
+      t.problema = !ok(t.centro) || !ok(t.emendas) || !ok(t.bordas) || /NOK|REALIZAR|PRECISA|DANIFICAD/.test(CA.semAcento(t.situacao_reparos + ' ' + t.situacao_bordas));
+      trechos.push(t);
+    }
+  }
+  return {trechos: trechos, atividades: CA.lerAtividades(rows, 'aba ' + tag)};
+};
+
+/* ===== Ambiente da página: carrega as abas, calcula e redesenha ===== */
 (function () {
-  var FONTES = {
-    atividades: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2cDDTQq8AKKFN5pThZjstkB1glE1c14aqlK2m-n92Uv2JsR4i6yo59SxFP3HGSZ5Sr68KX5FNCOKj/pub?gid=1267231826&single=true&output=csv',
-    especificacao: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2cDDTQq8AKKFN5pThZjstkB1glE1c14aqlK2m-n92Uv2JsR4i6yo59SxFP3HGSZ5Sr68KX5FNCOKj/pub?gid=812110065&single=true&output=csv'
-  };
-  var PADRAO = {planta: '', carc: '', prog: '', ativ: '', motivo: '', mes: '', equip: '', metrica: 'intervencoes', rank: 'intervencoes', ord: 'trocas', busca: ''};
-  var loaders = {}, calcs = [], draws = [], ouvintes = [], estado = {};
+  var PADRAO = {planta: '', carc: '', sit: '', prog: '', ativ: '', motivo: '', mes: '', equip: '', metrica: 'intervencoes', rank: 'intervencoes', ord: 'trocas', busca: '', alerta: ''};
+  var calcs = [], draws = [], ouvintes = [], estado = {};
   var params = Object.assign({}, PADRAO);
   var feitos = new WeakMap();
   var agendado = false;
+  var local = /(^|[?&])dados=local(&|$)/.test(location.search);
 
-  function data(id) {
-    return estado[id] || {status: 'loading', data: calcs.some(function (c) { return c.id === id; }) ? null : []};
-  }
+  function data(id) { return estado[id] || {status: 'loading', data: calcs.some(function (c) { return c.id === id; }) ? null : []}; }
   function recalcular() {
     calcs.forEach(function (c) {
       var ins = c.inputs.map(data);
@@ -63,28 +226,41 @@
     var s = document.getElementById('sincronia');
     if (s) s.classList.toggle('ca-sync-erro', !!erro);
   }
+  function url(f) {
+    if (local) return 'dev/' + f.dev + '?_=' + Date.now();
+    return f.gid ? CA_BASE + f.gid + '&_=' + Date.now() : null;
+  }
   function carregar() {
     sincronia('Lendo a planilha…');
-    var ids = Object.keys(FONTES);
-    return Promise.all(ids.map(function (id) {
-      return fetch(FONTES[id] + '&_=' + Date.now(), {cache: 'no-store'})
+    var res = {atividades: [], especificacao: [], condicao: [], trechos: [], ativ_abas: []};
+    var falhas = [], faltando = [];
+    return Promise.all(CA_FONTES.map(function (f) {
+      var u = url(f);
+      if (!u) { faltando.push(f.nome); return null; }
+      return fetch(u, {cache: 'no-store'})
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
         .then(function (texto) {
-          var r = loaders[id] ? loaders[id]({answer: texto}) : texto;
-          estado[id] = {status: 'ok', data: (r && r.rows) || r};
+          var rows = CA.csv(texto);
+          if (f.id === 'atividades') res.atividades = CA.lerAtividades(rows, 'atividades');
+          else if (f.id === 'especificacao') res.especificacao = CA.lerEspecificacao(rows);
+          else if (f.id === 'condicao') res.condicao = CA.lerCondicao(rows);
+          else if (f.id === 'equipamento') { var e = CA.lerEquipamento(rows, f.tag); res.trechos = res.trechos.concat(e.trechos); res.ativ_abas = res.ativ_abas.concat(e.atividades); }
         })
-        .catch(function (e) { console.error('fonte', id, e); estado[id] = {status: 'error', data: [], message: String(e)}; });
+        .catch(function (e) { console.error('aba', f.nome, e); falhas.push(f.nome); });
     })).then(function () {
+      Object.keys(res).forEach(function (k) { estado[k] = {status: 'ok', data: res[k]}; });
+      estado.fontes = {status: 'ok', data: {faltando: faltando, falhas: falhas}};
+      if (falhas.indexOf('ATIVIDADES 2026') >= 0) estado.atividades = {status: 'error', data: []};
       recalcular();
       agenda();
-      var falhou = ids.some(function (id) { return estado[id].status !== 'ok'; });
       var h = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
-      sincronia(falhou ? 'Não foi possível ler a planilha. Tente “Atualizar dados”.' : 'Dados da planilha lidos às ' + h, falhou);
+      var txt = falhas.length ? 'Não foi possível ler: ' + falhas.join(', ') + '. Tente “Atualizar dados”.' : 'Dados da planilha lidos às ' + h + (local ? ' (cópia local)' : '');
+      if (!falhas.length && faltando.length) txt += ' · ' + faltando.length + (faltando.length === 1 ? ' aba ainda não publicada' : ' abas ainda não publicadas');
+      sincronia(txt, falhas.length > 0);
     });
   }
 
   window.dash = {
-    loader: function (id, o) { loaders[id] = o.fn; },
     calc: function (id, o) { calcs.push({id: id, inputs: o.inputs, fn: o.fn}); },
     data: data,
     params: function () { return Object.assign({}, params); },
@@ -106,6 +282,7 @@
     }
   };
 })();
+
 </script>
 <style>
 :root { color-scheme: dark; --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif; }
@@ -218,7 +395,7 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
 .ca-ghost:disabled { opacity: .35; cursor: default; }
 
 /* Indicadores */
-.ca-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.ca-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px; }
 .ca-card { --mx: 50%; --my: 0%; position: relative; overflow: hidden; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; background: radial-gradient(260px 160px at var(--mx) var(--my), rgba(124,196,255,.09), transparent 70%), linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.012)); border: 1px solid var(--line); border-radius: 18px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); transition: border-color .25s, transform .25s var(--ease); }
 .ca-card:hover { border-color: var(--line-2); transform: translateY(-2px); }
 .ca-klabel { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3); }
@@ -304,6 +481,15 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
 .ca-cred dd { margin-left: auto; }
 .ca-cred dt { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-3); }
 .ca-cred dd { margin: 0; font-size: 12px; color: var(--fg-2); text-align: right; }
+.ca-obs { white-space: normal !important; min-width: 260px; max-width: 520px; line-height: 1.45; }
+.ca-scroll-sm { max-height: 380px; }
+.ca-chip-lg { height: 36px; font-size: 14px; }
+.ca-chart.ca-short { min-height: 90px; }
+.ca-mapa { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.ca-mapa-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.ca-mapa-h b { font-family: var(--mono); font-size: 13px; }
+.ca-mapa-h span { font-size: 12px; color: var(--fg-3); }
+.ca-trecho .ca-hit:hover { fill: rgba(255,255,255,.08); }
 [data-dash-source-state=refreshing] { opacity: .5; }
 
 @keyframes ca-pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
@@ -342,8 +528,8 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
     <div class="ca-sync" id="sincronia"><span class="ca-sync-dot" aria-hidden="true"></span><span id="sync-txt">Lendo a planilha…</span><button type="button" class="ca-ghost" id="sync-btn">Atualizar dados</button></div>
     <h1>Correias Alfa 2026</h1>
     <div class="ca-belt" aria-hidden="true"><i></i><span></span><i></i></div>
-    <p class="ca-sub">Registros de <b data-draw="periodo-ini" data-source="base" data-field="data">—</b> a <b data-draw="periodo-fim" data-source="base" data-field="data">—</b>, com cada intervenção ligada à especificação da sua correia.</p>
-    <p class="ca-take" id="resumo">Com os filtros atuais são <b data-draw="kpi" data-k="intervencoes" data-source="kpis" data-field="intervencoes" data-row="0">—</b> intervenções, e <b class="ca-hl" data-draw="kpi" data-k="pct_nao_planejadas" data-source="kpis" data-field="pct_nao_planejadas" data-row="0">—</b> delas foram não planejadas. O equipamento com mais intervenções é <b data-draw="top-eq" data-source="filtrado">—</b>, e a correia mais trocada é <b data-draw="top-troca" data-source="trocas" data-field="equipamento" data-row="0">—</b>.</p>
+    <p class="ca-sub">Registros de <b data-draw="periodo-ini" data-source="base" data-field="data">—</b> a <b data-draw="periodo-fim" data-source="base" data-field="data">—</b>, com cada intervenção ligada ao cadastro e à condição atual da sua correia.</p>
+    <p class="ca-take" id="resumo">Com os filtros atuais são <b data-draw="kpi" data-k="intervencoes" data-source="kpis" data-field="intervencoes" data-row="0">—</b> intervenções, e <b class="ca-hl" data-draw="kpi" data-k="pct_nao_planejadas" data-source="kpis" data-field="pct_nao_planejadas" data-row="0">—</b> delas foram não planejadas. Foram feitas <b data-draw="kpi" data-k="emendas">—</b> emendas e aplicados <b data-draw="kpi" data-k="metros_aplicados">—</b> m de correia. O equipamento com mais intervenções é <b data-draw="top-eq" data-source="filtrado">—</b>, e a correia mais trocada é <b data-draw="top-troca" data-source="trocas" data-field="equipamento" data-row="0">—</b>.</p>
     <dl class="ca-team" id="equipe">
       <div><dt>Inspetor</dt><dd>Leonardo Caetano</dd></div>
       <div><dt>Supervisor</dt><dd>Gustavo Luiz</dd></div>
@@ -371,6 +557,7 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
     </div>
     <div class="ca-frow"><span class="ca-flabel">Planta</span><div class="ca-chips" role="group" aria-label="Planta" data-draw="chips" data-param="planta" data-col="planta" data-source="base"></div></div>
     <div class="ca-frow"><span class="ca-flabel">Carcaça</span><div class="ca-chips" role="group" aria-label="Tipo de carcaça" data-draw="chips" data-param="carc" data-col="tipo_carcaca" data-source="base"></div></div>
+    <div class="ca-frow"><span class="ca-flabel">Situação atual</span><div class="ca-chips" role="group" aria-label="Situação atual da correia" data-draw="chips" data-param="sit" data-col="situacao_atual" data-source="base"></div></div>
     <div class="ca-frow"><span class="ca-flabel">Programação</span><div class="ca-chips" role="group" aria-label="Programação" data-draw="chips" data-param="prog" data-col="programacao" data-source="base"></div></div>
     <div class="ca-frow"><span class="ca-flabel">Mês</span><div class="ca-chips" role="group" aria-label="Mês" data-draw="chips" data-param="mes" data-col="mes" data-source="base"></div></div>
     <div class="ca-frow"><span class="ca-flabel">Motivo</span><div class="ca-chips" role="group" aria-label="Motivo" data-draw="chips" data-param="motivo" data-col="motivo" data-source="base"></div></div>
@@ -408,16 +595,22 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
     <div class="ca-card ca-rise" id="kpi-trocas" style="--i:4">
       <span class="ca-klabel">Correias substituídas</span>
       <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="substituicoes" data-source="kpis" data-field="substituicoes" data-row="0">—</span>
-      <span class="ca-knote">troca da correia inteira · por mês</span>
+      <span class="ca-knote">troca da correia inteira · mais <b data-draw="kpi" data-k="empalmos">—</b> empalmos (troca de trecho)</span>
       <div class="ca-spark" data-draw="spark" data-k="substituicoes" data-source="filtrado"></div>
     </div>
     <div class="ca-card ca-rise" id="kpi-metros" style="--i:5">
-      <span class="ca-klabel">Metros de correia trocados</span>
-      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="metros_substituidos" data-source="kpis" data-field="metros_substituidos" data-row="0">—</span>
-      <span class="ca-knote"><b data-draw="kpi" data-k="subst_sem_metros" data-source="kpis" data-field="subst_sem_metros" data-row="0">—</b> trocas sem metragem cadastrada · por mês</span>
+      <span class="ca-klabel">Metros de correia aplicados</span>
+      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="metros_aplicados">—</span>
+      <span class="ca-knote"><b data-draw="kpi" data-k="metros_substituidos">—</b> m em substituições · <b data-draw="kpi" data-k="metros_empalmo">—</b> m em empalmos · <b data-draw="kpi" data-k="sem_metragem">—</b> sem metragem</span>
       <div class="ca-spark" data-draw="spark" data-k="metros" data-source="filtrado"></div>
     </div>
-    <div class="ca-card ca-rise" id="kpi-nao-planejadas" style="--i:6">
+    <div class="ca-card ca-rise" id="kpi-emendas" style="--i:6">
+      <span class="ca-klabel">Emendas feitas</span>
+      <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="emendas">—</span>
+      <span class="ca-knote"><b data-draw="kpi" data-k="emendas_estimadas">—</b> empalmos contados pelo mínimo (2 emendas) · por mês</span>
+      <div class="ca-spark" data-draw="spark" data-k="emendas" data-source="filtrado"></div>
+    </div>
+    <div class="ca-card ca-rise" id="kpi-nao-planejadas" style="--i:7">
       <span class="ca-klabel">Não planejadas</span>
       <div class="ca-kflex">
         <span class="ca-kval dash-skeleton" data-draw="kpi" data-k="pct_nao_planejadas" data-source="kpis" data-field="pct_nao_planejadas" data-row="0">—</span>
@@ -436,7 +629,8 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
       <div class="ca-seg" role="group" aria-label="Medida do gráfico mensal">
         <button type="button" data-seg="metrica" data-v="intervencoes">Intervenções</button>
         <button type="button" data-seg="metrica" data-v="horas">Horas</button>
-        <button type="button" data-seg="metrica" data-v="metros">Metros trocados</button>
+        <button type="button" data-seg="metrica" data-v="metros">Metros aplicados</button>
+        <button type="button" data-seg="metrica" data-v="emendas">Emendas</button>
       </div>
     </div>
     <div class="ca-legend">
@@ -456,12 +650,13 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
       </div>
       <div class="ca-seg" role="group" aria-label="Ordenar ranking por">
         <button type="button" data-seg="rank" data-v="intervencoes">Intervenções</button>
-        <button type="button" data-seg="rank" data-v="metros">Metros trocados</button>
+        <button type="button" data-seg="rank" data-v="metros">Metros aplicados</button>
+        <button type="button" data-seg="rank" data-v="emendas">Emendas</button>
         <button type="button" data-seg="rank" data-v="horas">Horas</button>
       </div>
     </div>
     <div class="ca-legend" id="legenda-rank">
-      <span><i class="ca-sw" style="background:var(--c-accent)"></i>Substituição da correia</span>
+      <span><i class="ca-sw" style="background:var(--c-accent)"></i>Substituição ou empalmo</span>
       <span><i class="ca-sw" style="background:var(--c-accent-dim)"></i>Outras intervenções</span>
     </div>
     <div class="ca-chart" data-draw="top-equip" data-source="filtrado"></div>
@@ -477,6 +672,43 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
       <div class="ca-chart ca-mid" data-draw="ativ" data-source="filtrado"></div>
     </section>
   </div>
+
+  <section class="ca-panel ca-sec ca-rise" id="condicao" style="--i:11">
+    <div class="ca-sechead">
+      <div>
+        <h2>Condição atual das correias</h2>
+        <p class="ca-hint">Situação na última inspeção, da aba de condição atual. Clique numa situação para filtrar o painel e numa linha para isolar a correia. A última substituição considera a data mais recente entre a condição atual e as atividades.</p>
+      </div>
+    </div>
+    <div class="ca-chips" data-draw="sit-resumo" data-source="condicao_f"></div>
+    <div class="ca-scroll">
+      <table class="ca-table" data-source="condicao_f" data-row-key="equipamento">
+        <thead><tr>
+          <th data-field="equipamento">Equipamento</th>
+          <th data-field="planta">Planta</th>
+          <th data-field="situacao">Situação</th>
+          <th data-field="obs">Observação</th>
+          <th data-field="carcaca">Carcaça</th>
+          <th data-field="largura_pol" class="ca-num">Largura</th>
+          <th data-field="comprimento" class="ca-num">Comprimento (m)</th>
+          <th data-field="ultima_substituicao">Última substituição</th>
+          <th data-field="responsavel">Responsável EuroChem</th>
+          <th data-field="preparada">Correia preparada?</th>
+        </tr></thead>
+        <tbody data-draw="cond-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="ca-panel ca-sec ca-rise" id="trechos" style="--i:12">
+    <div class="ca-sechead">
+      <div>
+        <h2>Mapa de trechos</h2>
+        <p class="ca-hint">Correias longas mapeadas emenda a emenda. Cada bloco é um trecho, do tamanho do seu comprimento; cada divisão entre blocos é uma emenda. Passe o mouse para ver os detalhes.</p>
+      </div>
+    </div>
+    <div class="ca-chart ca-short" data-draw="mapa" data-source="mapa"></div>
+  </section>
 
   <section class="ca-panel ca-sec ca-rise" id="trocas" style="--i:11">
     <div class="ca-sechead">
@@ -509,7 +741,7 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
       <div class="ca-sechead">
         <div>
           <h2>Consumo por código SAP</h2>
-          <p class="ca-hint">Metros de correia trocados por código de material, para apoiar a reposição.</p>
+          <p class="ca-hint">Metros de correia aplicados (substituições e empalmos) por código de material, para apoiar a reposição.</p>
         </div>
       </div>
       <div class="ca-tablewrap">
@@ -518,7 +750,8 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
             <th data-field="sap">Código SAP</th>
             <th data-field="larguras">Largura</th>
             <th data-field="trocas" class="ca-num">Trocas</th>
-            <th data-field="metros_total">Metros trocados</th>
+            <th data-field="empalmos" class="ca-num">Empalmos</th>
+            <th data-field="metros_total">Metros aplicados</th>
           </tr></thead>
           <tbody data-draw="sap-body"></tbody>
         </table>
@@ -527,8 +760,8 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
     <section class="ca-panel ca-sec ca-rise" id="sem-especificacao" style="--i:13">
       <div class="ca-sechead">
         <div>
-          <h2>Sem especificação</h2>
-          <p class="ca-hint">Equipamentos com intervenção que não estão na planilha de especificação: sem metragem, largura ou código SAP. O número é a quantidade de intervenções.</p>
+          <h2>Sem cadastro</h2>
+          <p class="ca-hint">Equipamentos com intervenção que não aparecem na especificação nem na condição atual. O número é a quantidade de intervenções.</p>
         </div>
       </div>
       <div class="ca-nospec" data-draw="sem-spec" data-source="sem_spec"></div>
@@ -556,9 +789,26 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
           <th data-field="programacao">Programação</th>
           <th data-field="motivo">Motivo</th>
           <th data-field="horas" class="ca-num">Horas</th>
-          <th data-field="metros_substituidos" class="ca-num">Metros trocados</th>
+          <th data-field="emendas" class="ca-num">Emendas</th>
+          <th data-field="metros_aplicados" class="ca-num">Metros aplicados</th>
         </tr></thead>
         <tbody data-draw="lista-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="ca-panel ca-sec ca-rise" id="conferir" style="--i:15">
+    <div class="ca-sechead">
+      <div>
+        <h2>Pontos a conferir</h2>
+        <p class="ca-hint">Informações que faltam ou não batem entre as abas da planilha. Não mudam os números sozinhas, mas mostram onde o dado pode estar errado. Clique num tipo para ver só ele.</p>
+      </div>
+    </div>
+    <div class="ca-chips" data-draw="alerta-resumo" data-source="alertas"></div>
+    <div class="ca-scroll ca-scroll-sm">
+      <table class="ca-table">
+        <thead><tr><th>Tipo</th><th>Equipamento</th><th>Detalhe</th></tr></thead>
+        <tbody data-draw="alerta-body"></tbody>
       </table>
     </div>
   </section>
@@ -567,9 +817,11 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
     <summary>Como os números são calculados</summary>
     <ul>
       <li>As TAGs das duas planilhas são ligadas pela área e pelo número: 430TP009 corresponde a E89A-0430-TP-009. TAGs abreviadas ou com espaço sobrando (435TP04, "420TP013 ") são lidas como a TAG completa.</li>
-      <li>Tipo de carcaça: Cabo de aço quando a carcaça da especificação começa com ST seguido de número (ST500); Lona quando contém EP, PN (como PN2200), Poliester ou Nylon. Correias sem carcaça informada ou sem especificação não entram em nenhum dos dois botões.</li>
+      <li>Tipo de carcaça: Cabo de aço quando a carcaça da especificação começa com ST seguido de número (ST500); Lona quando contém EP, PN (como PN2200), PL, NN, MB, Poliester ou Nylon. Vale a carcaça instalada (condição atual) e, sem ela, a da especificação. Correias sem carcaça informada ou sem especificação não entram em nenhum dos dois botões.</li>
       <li>Não planejadas são as intervenções com programação Corretiva ou Emergência.</li>
-      <li>Metros trocados soma o comprimento da correia inteira a cada Substituição. Trocas em equipamentos sem especificação contam como troca, mas sem metros.</li>
+      <li>Metros aplicados soma o comprimento da correia inteira a cada Substituição (da especificação; sem ela, o comprimento TOTAL da condição atual) e os metros que entraram em cada Empalmo. No empalmo vale o "implementar ... m" das observações; sem ele, a soma dos trechos novos do mapa da correia. Sem nenhum dos dois, aparece como "sem metragem".</li>
+      <li>Emendas: cada empalmo conta 2 emendas para ligar o trecho novo à correia velha, mais 1 para cada bobina emendada a outra (3 bobinas = 2 + 2 = 4). O número de bobinas vem do mapa de trechos; sem ele, conta 2 (o mínimo, marcado com *). Substituição e Refazer emenda contam 1 emenda; reparos, true fix e grampo não contam.</li>
+      <li>Situação atual, carcaça instalada, largura e responsável EuroChem vêm da aba de condição atual. Quando a condição não informa a carcaça, vale a da especificação.</li>
       <li>Atividades marcadas como Parada anual não têm horas lançadas e ficam fora da soma de horas.</li>
       <li>Dentro de um mesmo filtro, escolher mais de uma opção soma as opções. Filtros diferentes se combinam entre si. O número em cada botão mostra quantas intervenções ele traria com os outros filtros atuais.</li>
       <li>Datas sem ano (05/08) foram lidas como 2026. A linha de 420TP06 sem data aparece como "Sem data" no filtro de mês.</li>
@@ -582,161 +834,120 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
 
 </div>
 <script>
-/* ---------- Leitura das planilhas ---------- */
-dash.loader('atividades', {
-  description: 'Lê o CSV, ignora linhas sem equipamento, padroniza a TAG (435TP04 vira 435TP004), converte a data para AAAA-MM-DD (sem ano = 2026) e as horas para número.',
-  fn: ({answer}) => {
-    const t = String(answer);
-    const csv = [];
-    let row = [], f = '', q = false;
-    for (let i = 0; i < t.length; i++) {
-      const c = t[i];
-      if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
-      else if (c === '"') q = true;
-      else if (c === ',') { row.push(f); f = ''; }
-      else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); csv.push(row); row = []; f = ''; }
-      else f += c;
-    }
-    if (f !== '' || row.length) { row.push(f); csv.push(row); }
-    const txt = (v) => String(v == null ? '' : v).trim().toUpperCase();
-    const rows = [];
-    csv.slice(1).forEach((r, i) => {
-      const bruto = txt(r[0]);
-      if (!bruto) return;
-      const m = bruto.match(/^(\d{3})(TP|FLE)(\d+)([A-Z]?)$/);
-      const equipamento = m ? m[1] + m[2] + m[3].padStart(3, '0') + m[4] : bruto;
-      const d = String(r[4] || '').trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
-      let data = null;
-      if (d) {
-        const y = !d[3] ? 2026 : d[3].length === 2 ? 2000 + Number(d[3]) : Number(d[3]);
-        data = y + '-' + d[2].padStart(2, '0') + '-' + d[1].padStart(2, '0');
-      }
-      const h = txt(r[5]);
-      const hn = Number(h.replace(',', '.'));
-      rows.push({
-        id: String(i + 2),
-        equipamento,
-        tag_original: String(r[0] || '').trim(),
-        planta: txt(r[1]),
-        atividade: txt(r[2]),
-        tipo_reparo: txt(r[3]),
-        data,
-        mes: data ? data.slice(0, 7) : '',
-        horas: h === '' || isNaN(hn) ? null : hn,
-        parada_anual: h === 'PARADA ANUAL',
-        programacao: txt(r[6]),
-        motivo: txt(r[7])
-      });
-    });
-    return {columns: ['id', 'equipamento', 'tag_original', 'planta', 'atividade', 'tipo_reparo', 'data', 'mes', 'horas', 'parada_anual', 'programacao', 'motivo'], rows};
-  }
-});
-
-dash.loader('especificacao', {
-  description: 'Lê o CSV de especificação e gera a TAG curta (E89A-0430-TP-009 vira 430TP009), a largura em polegadas e os metros como número.',
-  fn: ({answer}) => {
-    const t = String(answer);
-    const csv = [];
-    let row = [], f = '', q = false;
-    for (let i = 0; i < t.length; i++) {
-      const c = t[i];
-      if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
-      else if (c === '"') q = true;
-      else if (c === ',') { row.push(f); f = ''; }
-      else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); csv.push(row); row = []; f = ''; }
-      else f += c;
-    }
-    if (f !== '' || row.length) { row.push(f); csv.push(row); }
-    const s = (v) => String(v == null ? '' : v).trim();
-    const rows = [];
-    csv.slice(1).forEach((r) => {
-      const tag = s(r[0]).toUpperCase();
-      const m = tag.match(/^E89([A-Z])-0?(\d{3})-TP-(\d{3})$/);
-      if (!m) return;
-      const pol = s(r[5]);
-      const pm = pol.match(/^(\d+)/);
-      const mt = Number(s(r[6]).replace(',', '.'));
-      rows.push({
-        equipamento: m[2] + 'TP' + m[3],
-        tag_spec: tag,
-        unidade: 'E89' + m[1],
-        area: m[2],
-        material: s(r[1]),
-        carcaca: s(r[2]),
-        lonas: s(r[3]),
-        cobertura: s(r[4]),
-        largura_pol: pm ? Number(pm[1]) : null,
-        metros: s(r[6]) === '' || isNaN(mt) ? null : mt,
-        sap: s(r[7]),
-        situacao: /DESATIVADA/i.test(pol) ? 'DESATIVADA' : 'ATIVA'
-      });
-    });
-    return {columns: ['equipamento', 'tag_spec', 'unidade', 'area', 'material', 'carcaca', 'lonas', 'cobertura', 'largura_pol', 'metros', 'sap', 'situacao'], rows};
-  }
-});
-
-/* ---------- Cálculos ---------- */
+/* ---------- Regras de cálculo ---------- */
 dash.calc('base', {
-  title: 'Intervenções com a especificação da correia',
-  description: 'Cada intervenção com largura, carcaça, comprimento e código SAP da correia, ligados pela TAG.',
-  inputs: ['atividades', 'especificacao'],
-  fn: (atividades, especificacao) => {
+  inputs: ['atividades', 'especificacao', 'condicao', 'trechos', 'ativ_abas'],
+  fn: (atividades, especificacao, condicao, trechos, ativAbas) => {
     const spec = new Map(especificacao.map((s) => [s.equipamento, s]));
+    const cond = new Map(condicao.map((c) => [c.equipamento, c]));
+    // observações das abas por equipamento (ex.: "IMPLEMENTAR 500M") vão para a atividade correspondente da aba ATIVIDADES:
+    // primeiro a de mesma data; a de data diferente só se a atividade não tiver os trechos do mapa
+    const par = caParear(ativAbas, atividades);
+    const obsDe = new Map();
+    par.forEach((pp) => { if (pp.b && pp.a.obs && !obsDe.has(pp.b.id)) obsDe.set(pp.b.id, {obs: pp.a.obs, exata: pp.exata}); });
+    // trechos novos do mapa da correia ligados ao empalmo do mesmo período (bobinas)
+    const trechosDe = new Map();
+    trechos.filter((t) => t.data_instalacao).forEach((t) => {
+      let melhor = null, dist = 1e9;
+      atividades.forEach((a) => {
+        if (a.equipamento !== t.equipamento || a.atividade !== 'EMPALMO' || !a.data) return;
+        const d = CA.dias(t.data_instalacao, a.data);
+        if (d >= -3 && d <= 7 && Math.abs(d) < dist) { dist = Math.abs(d); melhor = a; }
+      });
+      if (melhor) { if (!trechosDe.has(melhor.id)) trechosDe.set(melhor.id, []); trechosDe.get(melhor.id).push(t); }
+    });
     return atividades.map((a) => {
-      const s = spec.get(a.equipamento);
-      const subst = a.atividade === 'SUBSTITUIR';
-      const carc = s ? String(s.carcaca || '').toUpperCase() : '';
-      const tipo_carcaca = /(^|[^A-Z])ST\s*\d/.test(carc) ? 'CABO DE AÇO'
-        : /EP|PN|POLIESTER|POLIÉSTER|NYLON/.test(carc) ? 'LONA' : '';
+      const s = spec.get(a.equipamento), c = cond.get(a.equipamento);
+      const carcaca = (c && c.carcaca) || (s && s.carcaca) || '';
+      const comprimento = s && s.metros != null ? s.metros : (c && c.comprimento != null && c.medida === 'TOTAL' ? c.comprimento : null);
+      const subst = a.atividade === 'SUBSTITUIR', empalmo = a.atividade === 'EMPALMO';
+      const tr = trechosDe.get(a.id) || [];
+      const ob = obsDe.get(a.id);
+      const obs = a.obs || (ob && (ob.exata || !tr.length) ? ob.obs : '');
+      const mObs = CA.semAcento(obs).match(/IMPLEMENTA\w*\s*(\d+(?:[.,]\d+)?)\s*M(?![A-Z])/);
+      let metrosEmp = null, bobinas = null;
+      if (empalmo) {
+        if (mObs) metrosEmp = CA.num(mObs[1]);
+        else if (tr.length) metrosEmp = d3.sum(tr, (t) => t.comprimento || 0) || null;
+        bobinas = tr.length || null;
+      }
+      const emendas = empalmo ? (bobinas || 1) + 1 : (subst || a.atividade === 'REFAZER EMENDA') ? 1 : 0;
+      const metrosSub = subst ? comprimento : 0;
       return Object.assign({}, a, {
-        tem_spec: !!s,
-        tipo_carcaca,
-        tag_spec: s ? s.tag_spec : '',
-        largura_pol: s ? s.largura_pol : null,
-        carcaca: s ? s.carcaca : '',
+        obs,
+        tem_spec: !!s || !!c,
+        tipo_carcaca: CA.tipoCarcaca(carcaca),
+        carcaca,
+        largura_pol: (s && s.largura_pol) || (c && c.largura_pol) || null,
         material: s ? s.material : '',
-        metros_correia: s ? s.metros : null,
+        metros_correia: comprimento,
         sap: s ? s.sap : '',
+        situacao_atual: c ? c.situacao : 'SEM AVALIAÇÃO',
+        responsavel: c ? c.responsavel : '',
         substituicao: subst,
-        metros_substituidos: subst && s && s.metros != null ? s.metros : (subst ? null : 0),
+        empalmo,
+        bobinas,
+        metros_substituidos: metrosSub,
+        metros_empalmo: empalmo ? metrosEmp : 0,
+        metros_aplicados: (metrosSub || 0) + (empalmo ? (metrosEmp || 0) : 0),
+        sem_metragem: (subst && metrosSub == null) || (empalmo && metrosEmp == null),
+        emendas,
+        emendas_estimadas: empalmo && !bobinas,
         nao_planejada: a.programacao === 'CORRETIVA' || a.programacao === 'EMERGENCIA'
       });
     });
   }
 });
 
+/* Pareia as atividades das abas por equipamento com as da aba ATIVIDADES: primeiro mesma data, depois a mais próxima (até 40 dias) entre as que sobraram */
+function caParear(abas, principais) {
+  const usados = new Set(), out = [];
+  const cand = (a) => principais.filter((b) => b.equipamento === a.equipamento && b.atividade === a.atividade && b.data && !usados.has(b.id));
+  const pendentes = [];
+  abas.forEach((a) => {
+    if (!a.data) { out.push({a, b: null, exata: false}); return; }
+    const b = cand(a).find((x) => x.data === a.data);
+    if (b) { usados.add(b.id); out.push({a, b, exata: true}); } else pendentes.push(a);
+  });
+  pendentes.forEach((a) => {
+    const c = cand(a).map((b) => [b, Math.abs(CA.dias(a.data, b.data))]).filter((x) => x[1] <= 40).sort((x, y) => x[1] - y[1])[0];
+    if (c) usados.add(c[0].id);
+    out.push({a, b: c ? c[0] : null, exata: false});
+  });
+  return out;
+}
+
+function caPassaFiltro(r, p, campos) {
+  const L = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
+  return Object.keys(campos).every((k) => { const v = L(p[k]); return !v.length || v.includes(campos[k] === 'mes' ? (r.mes || 'sem') : r[campos[k]]); });
+}
+
 dash.calc('filtrado', {
-  title: 'Intervenções no filtro atual',
-  description: 'As intervenções que passam pelos filtros de planta, tipo de carcaça, programação, mês, motivo, atividade e equipamento. Várias opções no mesmo filtro se somam.',
   inputs: ['base'],
   fn: (base) => {
     const p = dash.params();
-    const lista = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
-    const col = {planta: 'planta', carc: 'tipo_carcaca', prog: 'programacao', ativ: 'atividade', motivo: 'motivo', equip: 'equipamento'};
-    const regras = Object.keys(col).map((k) => [col[k], lista(p[k])]).filter((r) => r[1].length);
-    const meses = lista(p.mes);
-    return base.filter((r) =>
-      regras.every(([c, v]) => v.includes(r[c])) &&
-      (!meses.length || meses.includes(r.mes || 'sem')));
+    return base.filter((r) => caPassaFiltro(r, p, {planta: 'planta', carc: 'tipo_carcaca', sit: 'situacao_atual', prog: 'programacao', ativ: 'atividade', motivo: 'motivo', equip: 'equipamento', mes: 'mes'}));
   }
 });
 
 dash.calc('kpis', {
-  title: 'Indicadores do filtro atual',
-  description: 'Totais de intervenções, horas, trocas de correia, metros trocados e participação das não planejadas.',
   inputs: ['filtrado'],
-  fn: (filtrado) => {
-    const n = filtrado.length;
-    const np = filtrado.filter((r) => r.nao_planejada).length;
-    const subs = filtrado.filter((r) => r.substituicao);
+  fn: (f) => {
+    const n = f.length, np = f.filter((r) => r.nao_planejada).length;
+    const subs = f.filter((r) => r.substituicao), emps = f.filter((r) => r.empalmo);
     return [{
       intervencoes: n,
-      equipamentos: new Set(filtrado.map((r) => r.equipamento)).size,
-      horas: filtrado.reduce((s, r) => s + (r.horas || 0), 0),
-      sem_horas: filtrado.filter((r) => r.horas == null).length,
+      equipamentos: new Set(f.map((r) => r.equipamento)).size,
+      horas: d3.sum(f, (r) => r.horas || 0),
+      sem_horas: f.filter((r) => r.horas == null).length,
       substituicoes: subs.length,
-      metros_substituidos: subs.reduce((s, r) => s + (r.metros_substituidos || 0), 0),
-      subst_sem_metros: subs.filter((r) => r.metros_substituidos == null).length,
+      empalmos: emps.length,
+      metros_substituidos: d3.sum(subs, (r) => r.metros_substituidos || 0),
+      metros_empalmo: d3.sum(emps, (r) => r.metros_empalmo || 0),
+      metros_aplicados: d3.sum(f, (r) => r.metros_aplicados || 0),
+      sem_metragem: f.filter((r) => r.sem_metragem).length,
+      emendas: d3.sum(f, (r) => r.emendas),
+      emendas_estimadas: f.filter((r) => r.emendas_estimadas).length,
       nao_planejadas: np,
       pct_nao_planejadas: n ? Math.round(np / n * 1000) / 10 : 0
     }];
@@ -744,65 +955,44 @@ dash.calc('kpis', {
 });
 
 dash.calc('trocas', {
-  title: 'Trocas de correia por equipamento',
-  description: 'Substituições agrupadas por equipamento, com metros trocados, última troca e intervalo médio entre trocas.',
   inputs: ['filtrado'],
   fn: (filtrado) => {
-    const g = new Map();
-    filtrado.filter((r) => r.substituicao).forEach((r) => {
-      if (!g.has(r.equipamento)) g.set(r.equipamento, []);
-      g.get(r.equipamento).push(r);
-    });
+    const g = d3.group(filtrado.filter((r) => r.substituicao), (r) => r.equipamento);
     return Array.from(g, ([equipamento, rs]) => {
       const datas = rs.map((r) => r.data).filter(Boolean).sort();
       const r0 = rs[0];
-      const intervalo = datas.length >= 2
-        ? Math.round((Date.parse(datas[datas.length - 1]) - Date.parse(datas[0])) / 86400000 / (datas.length - 1))
-        : null;
       return {
-        equipamento,
-        planta: r0.planta,
-        trocas: rs.length,
-        metros_correia: r0.metros_correia,
+        equipamento, planta: r0.planta, trocas: rs.length, metros_correia: r0.metros_correia,
         metros_total: r0.metros_correia == null ? null : rs.length * r0.metros_correia,
-        largura_pol: r0.largura_pol,
-        carcaca: r0.carcaca,
-        sap: r0.sap,
+        largura_pol: r0.largura_pol, carcaca: r0.carcaca, sap: r0.sap,
         ultima_troca: datas.length ? datas[datas.length - 1] : null,
-        intervalo_medio_dias: intervalo
+        intervalo_medio_dias: datas.length >= 2 ? Math.round(CA.dias(datas[datas.length - 1], datas[0]) / (datas.length - 1)) : null
       };
     }).sort((a, b) => b.trocas - a.trocas || (b.metros_total || 0) - (a.metros_total || 0) || a.equipamento.localeCompare(b.equipamento));
   }
 });
 
 dash.calc('consumo_sap', {
-  title: 'Consumo de correia por código SAP',
-  description: 'Metros de correia trocados somados por código de material SAP.',
-  inputs: ['trocas'],
-  fn: (trocas) => {
+  inputs: ['filtrado'],
+  fn: (filtrado) => {
     const g = new Map();
-    trocas.forEach((t) => {
-      const k = t.sap || 'SEM CÓDIGO';
-      if (!g.has(k)) g.set(k, {sap: k, larg: new Set(), trocas: 0, metros_total: 0, equipamentos: 0});
+    filtrado.filter((r) => r.substituicao || r.empalmo).forEach((r) => {
+      const k = r.sap || 'SEM CÓDIGO';
+      if (!g.has(k)) g.set(k, {sap: k, larg: new Set(), trocas: 0, empalmos: 0, metros_total: 0, eq: new Set()});
       const o = g.get(k);
-      if (t.largura_pol != null) o.larg.add(t.largura_pol);
-      o.trocas += t.trocas;
-      o.metros_total += t.metros_total || 0;
-      o.equipamentos += 1;
+      if (r.largura_pol != null) o.larg.add(r.largura_pol);
+      if (r.substituicao) o.trocas += 1; else o.empalmos += 1;
+      o.metros_total += r.metros_aplicados || 0;
+      o.eq.add(r.equipamento);
     });
     return Array.from(g.values()).map((o) => ({
-      sap: o.sap,
-      larguras: Array.from(o.larg).sort((a, b) => a - b).map((l) => l + '"').join(' / '),
-      trocas: o.trocas,
-      metros_total: o.metros_total,
-      equipamentos: o.equipamentos
+      sap: o.sap, larguras: Array.from(o.larg).sort((a, b) => a - b).map((l) => l + '"').join(' / '),
+      trocas: o.trocas, empalmos: o.empalmos, metros_total: o.metros_total, equipamentos: o.eq.size
     })).sort((a, b) => b.metros_total - a.metros_total || b.trocas - a.trocas);
   }
 });
 
 dash.calc('sem_spec', {
-  title: 'Equipamentos sem especificação',
-  description: 'Equipamentos com intervenção no filtro atual que não aparecem na planilha de especificação.',
   inputs: ['filtrado'],
   fn: (filtrado) => {
     const g = new Map();
@@ -811,6 +1001,71 @@ dash.calc('sem_spec', {
       g.get(r.equipamento).intervencoes += 1;
     });
     return Array.from(g.values()).sort((a, b) => b.intervencoes - a.intervencoes || a.equipamento.localeCompare(b.equipamento));
+  }
+});
+
+const CA_SIT_ORDEM = ['CRÍTICO', 'REGULAR', 'BOM', 'SEM AVALIAÇÃO'];
+dash.calc('condicao_f', {
+  inputs: ['condicao', 'especificacao', 'atividades'],
+  fn: (condicao, especificacao, atividades) => {
+    const p = dash.params();
+    const spec = new Map(especificacao.map((s) => [s.equipamento, s]));
+    const ult = new Map();
+    atividades.forEach((a) => { if (a.atividade === 'SUBSTITUIR' && a.data && (!ult.has(a.equipamento) || a.data > ult.get(a.equipamento))) ult.set(a.equipamento, a.data); });
+    const hoje = new Date().toISOString().slice(0, 10);
+    return condicao.map((c) => {
+      const s = spec.get(c.equipamento);
+      const carcaca = c.carcaca || (s && s.carcaca) || '';
+      const ua = ult.get(c.equipamento) || null;
+      const us = [ua, c.ult_subst].filter(Boolean).sort().pop() || null;
+      return Object.assign({}, c, {
+        carcaca, tipo_carcaca: CA.tipoCarcaca(carcaca), situacao_atual: c.situacao,
+        ultima_substituicao: us, dias_desde: us ? CA.dias(hoje, us) : null,
+        desatualizada: !!(ua && c.ult_subst && ua > c.ult_subst)
+      });
+    }).filter((r) => caPassaFiltro(r, p, {planta: 'planta', carc: 'tipo_carcaca', sit: 'situacao_atual', equip: 'equipamento'}))
+      .sort((a, b) => CA_SIT_ORDEM.indexOf(a.situacao) - CA_SIT_ORDEM.indexOf(b.situacao) || (b.dias_desde || 0) - (a.dias_desde || 0) || a.equipamento.localeCompare(b.equipamento));
+  }
+});
+
+dash.calc('mapa', {
+  inputs: ['trechos', 'base'],
+  fn: (trechos, base) => {
+    const p = dash.params();
+    const L = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
+    const eqs = L(p.equip), pls = L(p.planta);
+    const g = d3.group(trechos, (t) => t.equipamento);
+    return Array.from(g, ([tag, ts]) => ({tag, planta: CA.planta(tag), trechos: ts, emendas: ts.length, metros: d3.sum(ts, (t) => t.comprimento || 0), problemas: ts.filter((t) => t.problema).length}))
+      .filter((m) => (!eqs.length || eqs.includes(m.tag)) && (!pls.length || pls.includes(m.planta)));
+  }
+});
+
+dash.calc('alertas', {
+  inputs: ['base', 'ativ_abas', 'condicao_f', 'fontes'],
+  fn: (base, ativAbas, cond, fontes) => {
+    const p = dash.params();
+    const L = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
+    const eqs = L(p.equip), pls = L(p.planta);
+    const ok = (tag, planta) => (!eqs.length || eqs.includes(tag)) && (!pls.length || pls.includes(planta || CA.planta(tag)));
+    const out = [];
+    const add = (tipo, equipamento, texto, planta) => { if (ok(equipamento, planta)) out.push({tipo, equipamento, texto}); };
+    fontes.faltando.forEach((n) => out.push({tipo: 'Aba não publicada', equipamento: '—', texto: n}));
+    base.forEach((a) => {
+      if (a.data_texto && !a.data) add('Data inválida', a.equipamento, `${a.atividade.toLowerCase()}: data "${a.data_texto}" não pôde ser lida`, a.planta);
+      else if (CA.semAno(a.data_texto)) add('Data sem ano', a.equipamento, `${a.atividade.toLowerCase()} em "${a.data_texto}" foi lida como ${dataBR(a.data)}`, a.planta);
+      if (a.empalmo && a.metros_empalmo == null) add('Empalmo sem metragem', a.equipamento, `empalmo de ${dataBR(a.data)} sem metros implementados informados`, a.planta);
+      if (a.emendas_estimadas) add('Emendas pelo mínimo', a.equipamento, `empalmo de ${dataBR(a.data)} sem número de bobinas: contadas 2 emendas`, a.planta);
+      if (a.substituicao && a.metros_substituidos == null) add('Troca sem metragem', a.equipamento, `substituição de ${dataBR(a.data)}: comprimento total da correia não cadastrado`, a.planta);
+      if (!a.tem_spec) add('Sem cadastro', a.equipamento, `${a.atividade.toLowerCase()} de ${dataBR(a.data)}: TAG não aparece na especificação nem na condição atual`, a.planta);
+    });
+    caParear(ativAbas, base).forEach(({a, b, exata}) => {
+      if (!a.data) { add('Data inválida', a.equipamento, `aba ${a.equipamento}: ${a.atividade.toLowerCase()} com data "${a.data_texto}"`); return; }
+      if (!b) { add('Só na aba do equipamento', a.equipamento, `${a.atividade.toLowerCase()} de ${dataBR(a.data)} não aparece em ATIVIDADES`); return; }
+      if (!exata) add('Abas divergem', a.equipamento, `${a.atividade.toLowerCase()}: ${dataBR(a.data)} na aba ${a.equipamento}, ${dataBR(b.data)} em ATIVIDADES`);
+      else if (a.programacao && b.programacao && a.programacao !== b.programacao) add('Abas divergem', a.equipamento, `${a.atividade.toLowerCase()} de ${dataBR(a.data)}: ${cap(a.programacao)} na aba ${a.equipamento}, ${cap(b.programacao)} em ATIVIDADES`);
+    });
+    cond.filter((c) => c.desatualizada).forEach((c) => add('Condição desatualizada', c.equipamento, `última substituição na condição atual é ${dataBR(c.ult_subst)}, mas ATIVIDADES registra ${dataBR(c.ultima_substituicao)}`, c.planta));
+    return out;
   }
 });
 
@@ -828,8 +1083,10 @@ const cap = (v) => {
 const PROGS = ['PROGRAMADO', 'OPORTUNIDADE', 'CORRETIVA', 'EMERGENCIA'];
 const PROG_COR = {PROGRAMADO: 'var(--c-prog)', OPORTUNIDADE: 'var(--c-oport)', CORRETIVA: 'var(--c-corr)', EMERGENCIA: 'var(--c-emer)'};
 const progCor = (p) => PROG_COR[p] || 'var(--fg-3)';
-const FILTROS = ['planta', 'carc', 'prog', 'mes', 'motivo', 'ativ', 'equip'];
-const COLS = {planta: 'planta', carc: 'tipo_carcaca', prog: 'programacao', mes: 'mes', motivo: 'motivo', ativ: 'atividade', equip: 'equipamento'};
+const FILTROS = ['planta', 'carc', 'sit', 'prog', 'mes', 'motivo', 'ativ', 'equip'];
+const COLS = {planta: 'planta', carc: 'tipo_carcaca', sit: 'situacao_atual', prog: 'programacao', mes: 'mes', motivo: 'motivo', ativ: 'atividade', equip: 'equipamento'};
+const SIT_COR = {'CRÍTICO': 'var(--c-emer)', REGULAR: 'var(--c-corr)', BOM: 'var(--c-teal)', 'SEM AVALIAÇÃO': 'var(--fg-3)'};
+const FAB_COR = {BORPAC: 'var(--c-teal)', MERCURIO: 'var(--c-prog)', METSO: 'var(--c-corr)', FLEXSTEEL: '#B48CFF'};
 const lista = (v) => Array.isArray(v) ? v.filter((x) => x !== '' && x != null) : (v ? [v] : []);
 const reduz = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
 const DUR = () => reduz() ? 0 : 700;
@@ -1046,7 +1303,7 @@ dash.draw('kpi', {
     el.classList.remove('dash-skeleton');
     const key = el.dataset.k, v = Number(k.data[0][key]) || 0;
     const pct = key === 'pct_nao_planejadas';
-    const dec = pct || key === 'horas' || key === 'metros_substituidos';
+    const dec = pct || key === 'horas' || key.indexOf('metros') === 0;
     const f = (x) => (dec ? nf1.format(Math.round(x * 10) / 10) : nf.format(Math.round(x))) + (pct ? '%' : '');
     const de = m.v == null ? 0 : m.v;
     m.v = v;
@@ -1098,10 +1355,12 @@ dash.draw('chips', (el) => {
   let vals = Array.from(total.keys()).filter((v) => v !== '' && v != null);
   if (col === 'mes') vals.sort((a, c) => (a === 'sem') - (c === 'sem') || a.localeCompare(c));
   else if (col === 'programacao') vals.sort((a, c) => (PROGS.indexOf(a) + 99 * (PROGS.indexOf(a) < 0)) - (PROGS.indexOf(c) + 99 * (PROGS.indexOf(c) < 0)));
+  else if (col === 'situacao_atual') vals.sort((a, c) => CA_SIT_ORDEM.indexOf(a) - CA_SIT_ORDEM.indexOf(c));
   else vals.sort((a, c) => total.get(c) - total.get(a) || a.localeCompare(c));
   d3.select(el).selectAll('button.ca-chip').data(vals, (d) => d).join((enter) => {
     const btn = enter.append('button').attr('type', 'button').attr('class', 'ca-chip');
     if (col === 'programacao') btn.append('span').attr('class', 'ca-dotc').style('background', (d) => progCor(d));
+    if (col === 'situacao_atual') btn.append('span').attr('class', 'ca-dotc').style('background', (d) => SIT_COR[d] || 'var(--fg-3)');
     btn.append('span').attr('class', 'ca-t').text((d) => rotuloVal(param, d));
     btn.append('span').attr('class', 'ca-n');
     return btn;
@@ -1151,7 +1410,7 @@ dash.draw('spark', {
     if (st.status !== 'ok' || b.status !== 'ok') return;
     const meses = Array.from(new Set(b.data.map((r) => r.mes).filter(Boolean))).sort();
     const k = el.dataset.k;
-    const val = (r) => k === 'horas' ? (r.horas || 0) : k === 'metros' ? (r.metros_substituidos || 0) : k === 'substituicoes' ? (r.substituicao ? 1 : 0) : 1;
+    const val = (r) => k === 'horas' ? (r.horas || 0) : k === 'metros' ? (r.metros_aplicados || 0) : k === 'emendas' ? r.emendas : k === 'substituicoes' ? (r.substituicao ? 1 : 0) : 1;
     const por = d3.rollup(st.data.filter((r) => r.mes), (v) => d3.sum(v, val), (r) => r.mes);
     const serie = meses.map((mm) => ({mes: mm, v: por.get(mm) || 0}));
     const W = el.clientWidth || 200, H = 40;
@@ -1211,9 +1470,9 @@ dash.draw('mes', {
     if (!estado(el, st) || b.status !== 'ok') return;
     const p = dash.params();
     const met = p.metrica || 'intervencoes';
-    const val = (r) => met === 'horas' ? (r.horas || 0) : met === 'metros' ? (r.metros_substituidos || 0) : 1;
-    const fmt = met === 'intervencoes' ? (v) => nf.format(v) : (v) => nf1.format(Math.round(v * 10) / 10);
-    const unid = {intervencoes: 'intervenções', horas: 'h', metros: 'm'}[met];
+    const val = (r) => met === 'horas' ? (r.horas || 0) : met === 'metros' ? (r.metros_aplicados || 0) : met === 'emendas' ? r.emendas : 1;
+    const fmt = met === 'intervencoes' || met === 'emendas' ? (v) => nf.format(v) : (v) => nf1.format(Math.round(v * 10) / 10);
+    const unid = {intervencoes: 'intervenções', horas: 'h', metros: 'm', emendas: 'emendas'}[met];
     const meses = Array.from(new Set(b.data.map((r) => r.mes).filter(Boolean))).sort();
     const sel = lista(p.mes);
     const dados = meses.map((mm) => {
@@ -1267,26 +1526,30 @@ hbarDraw('top-equip', (rows, p) => {
   const rank = p.rank || 'intervencoes';
   const itens = d3.rollups(rows, (v) => {
     const s = v.filter((r) => r.substituicao).length;
-    const metros = d3.sum(v, (r) => r.metros_substituidos || 0);
+    const e = v.filter((r) => r.empalmo).length;
+    const metros = d3.sum(v, (r) => r.metros_aplicados || 0);
     const horas = d3.sum(v, (r) => r.horas || 0);
-    const o = {n: v.length, s, metros, horas, planta: v[0].planta, comp: v[0].metros_correia};
+    const emendas = d3.sum(v, (r) => r.emendas);
+    const o = {n: v.length, s, e, metros, horas, emendas, planta: v[0].planta, comp: v[0].metros_correia, sit: v[0].situacao_atual};
     if (rank === 'metros') { o.a = metros; o.b = 0; o.total = metros; }
     else if (rank === 'horas') { o.a = horas; o.b = 0; o.total = horas; }
-    else { o.a = s; o.b = v.length - s; o.total = v.length; }
+    else if (rank === 'emendas') { o.a = emendas; o.b = 0; o.total = emendas; }
+    else { o.a = s + e; o.b = v.length - s - e; o.total = v.length; }
     return o;
   }, (r) => r.equipamento).map(([key, o]) => Object.assign({key}, o))
     .filter((d) => d.total > 0)
     .sort((a, b) => b.total - a.total || b.n - a.n || a.key.localeCompare(b.key)).slice(0, 15);
-  const fmt = rank === 'intervencoes' ? (v) => nf.format(v) : (v) => nf1.format(Math.round(v * 10) / 10) + (rank === 'metros' ? ' m' : ' h');
+  const fmt = rank === 'intervencoes' || rank === 'emendas' ? (v) => nf.format(v) : (v) => nf1.format(Math.round(v * 10) / 10) + (rank === 'metros' ? ' m' : ' h');
   return {itens, o: {
-    aria: 'Ranking dos equipamentos por ' + {intervencoes: 'intervenções', metros: 'metros de correia trocados', horas: 'horas de intervenção'}[rank],
+    aria: 'Ranking dos equipamentos por ' + {intervencoes: 'intervenções', metros: 'metros de correia aplicados', horas: 'horas de intervenção', emendas: 'emendas feitas'}[rank],
     rotulo: (k) => k,
     fmt,
     series: rank === 'intervencoes' ? [{key: 'a', cor: 'var(--c-accent)'}, {key: 'b', cor: 'var(--c-accent-dim)'}] : [{key: 'a', cor: 'grad'}, {key: 'b', cor: 'var(--c-accent-dim)'}],
     sel: lista(p.equip),
-    dica: (d) => [d.key + ' · ' + cap(d.planta), ['Intervenções', nf.format(d.n)], ['Substituições', nf.format(d.s), 'var(--c-accent)'],
-      ['Metros trocados', nf1.format(d.metros) + ' m'], ['Horas', nf1.format(d.horas) + ' h'],
-      ['Comprimento da correia', d.comp != null ? nf1.format(d.comp) + ' m' : 'sem especificação']],
+    dica: (d) => [d.key + ' · ' + cap(d.planta) + ' · ' + cap(d.sit), ['Intervenções', nf.format(d.n)], ['Substituições', nf.format(d.s), 'var(--c-accent)'],
+      ['Empalmos', nf.format(d.e), 'var(--c-accent)'], ['Emendas feitas', nf.format(d.emendas)],
+      ['Metros aplicados', nf1.format(d.metros) + ' m'], ['Horas', nf1.format(d.horas) + ' h'],
+      ['Comprimento da correia', d.comp != null ? nf1.format(d.comp) + ' m' : 'sem cadastro']],
     clique: (k) => alterna('equip', k)
   }};
 });
@@ -1382,7 +1645,7 @@ tabela('sap-body', () => {
 }, (tb) => {
   const st = dash.data('consumo_sap');
   if (st.status !== 'ok') return;
-  if (!st.data.length) { linhaVazia(tb, 4, 'Nenhuma substituição com os filtros atuais.'); return; }
+  if (!st.data.length) { linhaVazia(tb, 5, 'Nenhuma substituição ou empalmo com os filtros atuais.'); return; }
   const maxM = d3.max(st.data, (r) => r.metros_total) || 1;
   st.data.forEach((r, i) => {
     const tr = tb.insertRow();
@@ -1391,6 +1654,7 @@ tabela('sap-body', () => {
     celula(tr, r.sap, 'ca-tag-code');
     celula(tr, r.larguras || '—', r.larguras ? '' : 'ca-muted');
     celula(tr, nf.format(r.trocas), 'ca-num');
+    celula(tr, nf.format(r.empalmos), 'ca-num');
     const td = celula(tr, nf1.format(r.metros_total), 'ca-bar-cell');
     if (r.metros_total) {
       const bar = document.createElement('span');
@@ -1416,7 +1680,152 @@ dash.draw('sem-spec', (el) => {
     .attr('title', (d) => cap(d.planta))
     .on('click', (ev, d) => alterna('equip', d.equipamento))
     .select('.ca-n').text((d) => nf.format(d.intervencoes));
-  if (!st.data.length) vazio(el, 'Todos os equipamentos do filtro atual têm especificação.');
+  if (!st.data.length) vazio(el, 'Todos os equipamentos do filtro atual têm cadastro.');
+});
+
+/* Condição atual: contagem por situação e tabela das correias */
+dash.draw('sit-resumo', (el) => {
+  const st = dash.data('condicao_f');
+  if (st.status !== 'ok') { el.replaceChildren(); return; }
+  const cont = d3.rollup(st.data, (v) => v.length, (r) => r.situacao);
+  const sel = lista(dash.params().sit);
+  d3.select(el).selectAll('button.ca-chip').data(CA_SIT_ORDEM.filter((s) => cont.get(s)), (d) => d).join((enter) => {
+    const b = enter.append('button').attr('type', 'button').attr('class', 'ca-chip ca-chip-lg');
+    b.append('span').attr('class', 'ca-dotc').style('background', (d) => SIT_COR[d]);
+    b.append('span').attr('class', 'ca-t').text((d) => cap(d));
+    b.append('span').attr('class', 'ca-n');
+    return b;
+  })
+    .attr('aria-pressed', (d) => String(sel.includes(d)))
+    .on('click', (ev, d) => alterna('sit', d))
+    .select('.ca-n').text((d) => nf.format(cont.get(d) || 0));
+});
+
+tabela('cond-body', () => {
+  const st = dash.data('condicao_f');
+  return st.status + '|' + lista(dash.params().equip).join(',') + '|' + (st.status === 'ok' ? st.data.map((r) => r.equipamento + r.situacao + r.dias_desde).join(',') : '');
+}, (tb) => {
+  const st = dash.data('condicao_f');
+  if (st.status !== 'ok') return;
+  if (!st.data.length) { linhaVazia(tb, 10, 'Nenhuma correia com os filtros atuais.'); return; }
+  const sel = lista(dash.params().equip);
+  st.data.forEach((r, i) => {
+    const tr = tb.insertRow();
+    tr.dataset.key = r.equipamento;
+    tr.className = 'ca-click' + (sel.includes(r.equipamento) ? ' ca-sel' : '');
+    if (i < 30) entra(tr, i);
+    tr.onclick = () => alterna('equip', r.equipamento);
+    celula(tr, r.equipamento, 'ca-tag-code');
+    celula(tr, cap(r.planta));
+    const tds = tr.insertCell();
+    const pill = document.createElement('span');
+    pill.className = 'ca-pill';
+    pill.style.color = SIT_COR[r.situacao];
+    pill.textContent = cap(r.situacao);
+    tds.appendChild(pill);
+    const tdo = celula(tr, r.obs ? r.obs.replace(/\s*\n\s*/g, ' · ') : '—', 'ca-obs' + (r.obs ? '' : ' ca-muted'));
+    if (r.obs) tdo.title = r.obs;
+    celula(tr, r.carcaca || '—', r.carcaca ? '' : 'ca-muted');
+    celula(tr, r.largura_pol != null ? r.largura_pol + '"' : '—', 'ca-num');
+    celula(tr, r.comprimento != null ? nf1.format(r.comprimento) + (r.medida ? ' (' + r.medida.toLowerCase() + ')' : '') : '—', 'ca-num' + (r.comprimento == null ? ' ca-muted' : ''));
+    celula(tr, r.ultima_substituicao ? dataBR(r.ultima_substituicao) + ' · ' + nf.format(r.dias_desde) + ' dias' : '—', r.ultima_substituicao ? '' : 'ca-muted');
+    celula(tr, r.responsavel ? cap(r.responsavel) : '—', r.responsavel ? '' : 'ca-muted');
+    celula(tr, r.preparada ? cap(r.preparada) : '—', r.preparada ? '' : 'ca-muted');
+  });
+});
+
+/* Mapa de trechos: uma barra por correia, cada trecho proporcional ao comprimento; cada divisão é uma emenda */
+dash.draw('mapa', {
+  mount: (el) => ({k: null}),
+  update: (el, m) => {
+    const st = dash.data('mapa');
+    if (st.status !== 'ok') return;
+    const W = el.clientWidth || 600;
+    const k = W + '|' + lista(dash.params().equip).join(',') + '|' + st.data.map((x) => x.tag + x.emendas + x.metros).join(',');
+    if (k === m.k) return;
+    m.k = k;
+    el.replaceChildren();
+    if (!st.data.length) { vazio(el, 'Nenhuma correia com mapa de trechos nos filtros atuais. Hoje existem abas de trechos para 150TP004 e 220TP003.'); return; }
+    const tt = novaDica(el);
+    st.data.forEach((mp) => {
+      const box = document.createElement('div');
+      box.className = 'ca-mapa';
+      const h = document.createElement('div');
+      h.className = 'ca-mapa-h';
+      const b = document.createElement('b');
+      b.textContent = mp.tag;
+      const s = document.createElement('span');
+      s.textContent = `${nf.format(mp.trechos.length)} trechos · ${nf.format(mp.emendas)} emendas · ${nf1.format(mp.metros)} m` + (mp.problemas ? ` · ${nf.format(mp.problemas)} trechos com avaria` : '');
+      h.append(b, s);
+      box.appendChild(h);
+      el.appendChild(box);
+      const H = 34, total = mp.metros || 1;
+      const x = d3.scaleLinear().domain([0, total]).range([0, W]);
+      const svg = d3.select(box).append('svg').attr('width', '100%').attr('height', H + 8).attr('viewBox', `0 0 ${W} ${H + 8}`).attr('role', 'img')
+        .attr('aria-label', `Mapa de trechos da ${mp.tag}: ${mp.trechos.length} trechos e ${mp.emendas} emendas`);
+      let acc = 0;
+      const dados = mp.trechos.map((t) => { const o = Object.assign({x0: acc}, t); acc += t.comprimento || 0; return o; });
+      const g = svg.selectAll('g').data(dados).join('g').attr('class', 'ca-trecho');
+      g.append('rect').attr('x', (d) => x(d.x0)).attr('y', 6).attr('height', H - 6).attr('rx', 3)
+        .attr('width', (d) => Math.max(1, x(d.comprimento || 0) - 2)).style('fill', (d) => FAB_COR[d.fabricante] || 'var(--fg-3)').style('opacity', 0.85);
+      g.filter((d) => d.problema).append('rect').attr('x', (d) => x(d.x0)).attr('y', 0).attr('height', 3).attr('rx', 1.5)
+        .attr('width', (d) => Math.max(1, x(d.comprimento || 0) - 2)).style('fill', 'var(--c-emer)');
+      g.append('rect').attr('class', 'ca-hit').attr('x', (d) => x(d.x0)).attr('y', 0).attr('height', H + 8).attr('width', (d) => Math.max(1, x(d.comprimento || 0)))
+        .on('mousemove', (ev, d) => dica(el, tt, ev, [d.nome,
+          ['Comprimento', d.comprimento != null ? nf1.format(d.comprimento) + ' m' : '—'], ['Fabricante', cap(d.fabricante) + (d.classe ? ' ' + d.classe : ''), FAB_COR[d.fabricante]],
+          ['Instalado em', d.data_instalacao ? dataBR(d.data_instalacao) : 'não informado'], ['Espessura', d.espessura != null ? nf1.format(d.espessura) + ' mm' : '—'],
+          ['Largura medida', d.largura_medida != null ? d.largura_medida + '"' : '—'], ['Centro', d.centro.replace(/\s*\n\s*/g, ' · ') || '—'],
+          ['Emenda', d.emendas.replace(/\s*\n\s*/g, ' · ') || '—'], ['Bordas', d.bordas.replace(/\s*\n\s*/g, ' · ') || '—'], ['Reparos', (d.reparos + ' ' + d.situacao_reparos).replace(/\s*\n\s*/g, ' · ').trim() || '—']]))
+        .on('mouseleave', () => escondeDica(tt));
+    });
+    const fabs = Array.from(new Set(st.data.flatMap((mp) => mp.trechos.map((t) => t.fabricante))));
+    const leg = document.createElement('div');
+    leg.className = 'ca-legend';
+    fabs.concat(['__avaria']).forEach((f) => {
+      const sp = document.createElement('span');
+      const sw = document.createElement('i');
+      sw.className = 'ca-sw';
+      sw.style.background = f === '__avaria' ? 'var(--c-emer)' : (FAB_COR[f] || 'var(--fg-3)');
+      sp.append(sw, document.createTextNode(f === '__avaria' ? 'Trecho com avaria ou reparo pendente' : cap(f)));
+      leg.appendChild(sp);
+    });
+    el.appendChild(leg);
+  }
+});
+
+/* Pontos a conferir */
+dash.draw('alerta-resumo', (el) => {
+  const st = dash.data('alertas');
+  if (st.status !== 'ok') { el.replaceChildren(); return; }
+  const cont = d3.rollups(st.data, (v) => v.length, (r) => r.tipo).sort((a, b) => b[1] - a[1]);
+  const sel = dash.params().alerta || '';
+  d3.select(el).selectAll('button.ca-chip').data(cont, (d) => d[0]).join((enter) => {
+    const b = enter.append('button').attr('type', 'button').attr('class', 'ca-chip');
+    b.append('span').attr('class', 'ca-t').text((d) => d[0]);
+    b.append('span').attr('class', 'ca-n');
+    return b;
+  })
+    .attr('aria-pressed', (d) => String(sel === d[0]))
+    .on('click', (ev, d) => dash.setParams({alerta: sel === d[0] ? null : d[0]}))
+    .select('.ca-n').text((d) => nf.format(d[1]));
+});
+
+tabela('alerta-body', () => {
+  const st = dash.data('alertas');
+  return st.status + '|' + (dash.params().alerta || '') + '|' + (st.status === 'ok' ? st.data.length + st.data.map((a) => a.texto).join('').length : '');
+}, (tb) => {
+  const st = dash.data('alertas');
+  if (st.status !== 'ok') return;
+  const sel = dash.params().alerta || '';
+  const rows = st.data.filter((a) => !sel || a.tipo === sel);
+  if (!rows.length) { linhaVazia(tb, 3, 'Nada a conferir com os filtros atuais.'); return; }
+  rows.forEach((a, i) => {
+    const tr = tb.insertRow();
+    if (i < 30) entra(tr, i);
+    celula(tr, a.tipo);
+    celula(tr, a.equipamento, 'ca-tag-code');
+    celula(tr, a.texto, 'ca-obs');
+  });
 });
 
 tabela('lista-body', () => {
@@ -1431,8 +1840,8 @@ tabela('lista-body', () => {
     const tagB = normTag(busca);
     rows = rows.filter((r) => [r.equipamento, r.atividade, r.motivo, r.tipo_reparo, r.planta, r.programacao].some((v) => String(v || '').includes(busca) || String(v || '').includes(tagB)));
   }
-  if (!rows.length) { linhaVazia(tb, 9, 'Nenhuma intervenção encontrada.'); return; }
-  rows = rows.slice().sort((a, b) => (b.data || '').localeCompare(a.data || '') || Number(b.id) - Number(a.id));
+  if (!rows.length) { linhaVazia(tb, 10, 'Nenhuma intervenção encontrada.'); return; }
+  rows = rows.slice().sort((a, b) => (b.data || '').localeCompare(a.data || '') || b.linha - a.linha);
   rows.forEach((r, i) => {
     const tr = tb.insertRow();
     tr.dataset.key = r.id;
@@ -1449,7 +1858,8 @@ tabela('lista-body', () => {
     tdp.appendChild(pill);
     celula(tr, cap(r.motivo));
     celula(tr, r.horas != null ? nf1.format(r.horas) : (r.parada_anual ? 'Parada anual' : '—'), 'ca-num' + (r.horas == null ? ' ca-muted' : ''));
-    celula(tr, r.substituicao ? (r.metros_substituidos != null ? nf1.format(r.metros_substituidos) : 'sem espec.') : '', 'ca-num' + (r.metros_substituidos == null ? ' ca-muted' : ''));
+    celula(tr, r.emendas ? nf.format(r.emendas) + (r.emendas_estimadas ? '*' : '') : '', 'ca-num');
+    celula(tr, (r.substituicao || r.empalmo) ? (r.sem_metragem ? 'sem metragem' : nf1.format(r.metros_aplicados)) : '', 'ca-num' + (r.sem_metragem ? ' ca-muted' : ''));
   });
 });
 </script>
