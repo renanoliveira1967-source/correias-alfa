@@ -36,8 +36,14 @@ const ABAS = {
   }
 };
 
+// planilha do relatório: funciona tanto colado pela planilha (Extensões > Apps Script) quanto num projeto avulso
+const PLANILHA_ID = '1qj79sFW3A26g6i3JTXBzoodn8_RlhRPN51GLrrQn0_g';
+function planilha_() {
+  return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(PLANILHA_ID);
+}
+
 function configurar() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = planilha_();
   Object.keys(ABAS).forEach(function (k) { aba_(ss, ABAS[k]); });
 }
 
@@ -75,7 +81,7 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const sh = aba_(SpreadsheetApp.getActive(), def);
+    const sh = aba_(planilha_(), def);
     const agora = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss');
     const id = Utilities.getUuid().slice(0, 8).toUpperCase();
     const linhas = regs.map(function (r) {
