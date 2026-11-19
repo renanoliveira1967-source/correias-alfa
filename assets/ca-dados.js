@@ -13,7 +13,7 @@ var CA_FONTES = [
   {id: 'lanc_trechos', nome: 'LANÇ TRECHOS', gid: '1882084482', dev: 'lanc_trechos.csv', opcional: true}
 ];
 // endereço do App da Web do Apps Script que grava os lançamentos na planilha
-var CA_GRAVACAO = '';
+var CA_GRAVACAO = 'https://script.google.com/macros/s/AKfycbz3VlL0IuWyhmPPkfgQZUcd92Ju6XRmTfKM1I4VhRVAKEpaBuERygFyAmiwIUKsdxzYkA/exec';
 
 /* ===== Leitura e limpeza (as planilhas são lidas pelo nome das colunas, não pela posição) ===== */
 var CA = window.CA = {};
