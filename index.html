@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="assets/ca-dados.js?v=20261118b"></script>
+<script src="assets/ca-dados.js?v=20261119a"></script>
 <script>
 
 /* ===== Ambiente da página: carrega as abas, calcula e redesenha ===== */
@@ -128,7 +128,7 @@
 })();
 
 </script>
-<link rel="stylesheet" href="assets/painel.css?v=20261118b">
+<link rel="stylesheet" href="assets/painel.css?v=20261119a">
 </head>
 <body>
 <div id="dash-root">
@@ -320,6 +320,17 @@
       </div>
     </div>
     <div class="ca-chart ca-short" data-draw="mapa" data-source="mapa"></div>
+  </section>
+
+  <section class="ca-panel ca-sec ca-rise" id="relatorios" style="--i:12">
+    <div class="ca-sechead">
+      <div>
+        <h2>Relatórios de emendas <span class="ca-none" id="rel-n"></span></h2>
+        <p class="ca-hint">Fichas e relatórios em PDF, guardados na pasta do Google Drive. Seguem os filtros de equipamento e planta. Clique na TAG para filtrar o painel por ela.</p>
+      </div>
+      <a class="ca-ghost ca-lancar" href="lancar.html#relatorio">Anexar relatório</a>
+    </div>
+    <div class="ca-rel" data-draw="relatorios"></div>
   </section>
 
   <section class="ca-panel ca-sec ca-rise" id="trocas" style="--i:11">
@@ -1478,6 +1489,82 @@ tabela('lista-body', () => {
     celula(tr, (r.substituicao || r.empalmo) ? (r.sem_metragem ? 'sem metragem' : nf1.format(r.metros_aplicados)) : '', 'ca-num' + (r.sem_metragem ? ' ca-muted' : ''));
   });
 });
+
+/* Relatórios de emendas: PDFs da pasta do Drive, listados e baixados pelo script do Google */
+const rel = {status: 'loading', lista: []};
+function carregarRelatorios() {
+  if (typeof CA_GRAVACAO === 'undefined' || !CA_GRAVACAO) { rel.status = 'off'; dash.setParams({}); return; }
+  rel.status = 'loading';
+  fetch(CA_GRAVACAO + '?acao=relatorios&_=' + Date.now(), {cache: 'no-store'})
+    .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then((r) => {
+      if (!r.ok) throw new Error(r.erro || 'falhou');
+      if (!Array.isArray(r.arquivos)) { rel.status = 'pendente'; return; }
+      rel.lista = r.arquivos.map(CA.lerRelatorio)
+        .sort((a, b) => (b.data || '').localeCompare(a.data || '') || a.tag.localeCompare(b.tag) || a.titulo.localeCompare(b.titulo));
+      rel.status = 'ok';
+    })
+    .catch((e) => { console.error('relatórios', e); rel.status = 'error'; })
+    .then(() => dash.setParams({}));
+}
+function abrirRelatorio(r, baixar, btn) {
+  const txt = btn.textContent;
+  const w = baixar ? null : window.open('', '_blank');
+  btn.disabled = true; btn.textContent = baixar ? 'Baixando…' : 'Abrindo…';
+  CA.baixarRelatorio(r.id).then((f) => {
+    const u = URL.createObjectURL(f.blob);
+    if (w && !w.closed) { w.location.href = u; }
+    else { const a = document.createElement('a'); a.href = u; a.download = f.nome; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(() => URL.revokeObjectURL(u), 60000);
+  }).catch((e) => {
+    if (w) w.close();
+    const m = btn.closest('.ca-rel-row').querySelector('.ca-rel-erro');
+    if (m) m.textContent = 'Não foi possível abrir: ' + e.message;
+  }).then(() => { btn.disabled = false; btn.textContent = txt; });
+}
+tabela('relatorios', () => {
+  const p = dash.params();
+  return rel.status + '|' + lista(p.equip).join(',') + '|' + lista(p.planta).join(',') + '|' + rel.lista.map((r) => r.id).join(',');
+}, (el) => {
+  const n = document.getElementById('rel-n');
+  if (n) n.textContent = '';
+  if (rel.status === 'loading') { vazio(el, 'Lendo a pasta de relatórios…'); return; }
+  if (rel.status === 'off' || rel.status === 'pendente') { vazio(el, 'A lista de relatórios aparece quando o script do Google for atualizado para a versão com relatórios.'); return; }
+  if (rel.status === 'error') { vazio(el, 'Não foi possível ler a pasta de relatórios agora. Tente “Atualizar dados”.'); return; }
+  const p = dash.params(), eq = lista(p.equip), pl = lista(p.planta);
+  const rows = rel.lista.filter((r) => (!eq.length || eq.includes(r.tag)) && (!pl.length || pl.includes(r.planta)));
+  if (n) n.textContent = rows.length + (rows.length === 1 ? ' arquivo' : ' arquivos');
+  if (!rows.length) { vazio(el, rel.lista.length ? 'Nenhum relatório para o filtro atual.' : 'Nenhum relatório na pasta ainda.'); return; }
+  rows.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'ca-rel-row';
+    entra(row, i);
+    const ic = document.createElement('div'); ic.className = 'ca-rel-ic'; ic.textContent = 'PDF'; ic.setAttribute('aria-hidden', 'true');
+    const info = document.createElement('div'); info.style.minWidth = '0';
+    const t = document.createElement('div'); t.className = 'ca-rel-t'; t.textContent = r.titulo; t.title = r.nome;
+    const m = document.createElement('div'); m.className = 'ca-rel-m';
+    if (r.tag) {
+      const c = document.createElement('button'); c.type = 'button'; c.className = 'ca-chip ca-tag-code'; c.textContent = r.tag;
+      c.setAttribute('aria-pressed', String(eq.includes(r.tag)));
+      c.onclick = () => alterna('equip', r.tag);
+      m.append(c);
+    }
+    const partes = [r.data ? dataBR(r.data) : 'sem data', r.tamanho ? nf1.format(r.tamanho / 1048576) + ' MB' : '', r.por].filter(Boolean);
+    partes.forEach((s) => { const sp = document.createElement('span'); sp.textContent = s; m.append(sp); });
+    const er = document.createElement('div'); er.className = 'ca-rel-erro';
+    info.append(t, m, er);
+    const ac = document.createElement('div'); ac.className = 'ca-rel-a';
+    const b1 = document.createElement('button'); b1.type = 'button'; b1.className = 'ca-ghost'; b1.textContent = 'Abrir';
+    b1.onclick = () => abrirRelatorio(r, false, b1);
+    const b2 = document.createElement('button'); b2.type = 'button'; b2.className = 'ca-ghost ca-pri'; b2.textContent = 'Baixar';
+    b2.onclick = () => abrirRelatorio(r, true, b2);
+    ac.append(b1, b2);
+    row.append(ic, info, ac);
+    el.append(row);
+  });
+});
+document.getElementById('sync-btn').addEventListener('click', carregarRelatorios);
+carregarRelatorios();
 </script>
 <script>dash.__iniciar();</script>
 </body>

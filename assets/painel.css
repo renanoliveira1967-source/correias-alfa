@@ -216,7 +216,7 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
   .ca-belt span { animation: ca-run 1.4s linear infinite; }
   .ca-live { animation: ca-ping 2.2s ease-out infinite; }
   .ca-halo { animation: ca-halo 2.4s ease-out infinite; }
-  .ca-table tbody tr.ca-in { animation: ca-rowin .45s var(--ease) both; }
+  .ca-table tbody tr.ca-in, .ca-rel-row.ca-in { animation: ca-rowin .45s var(--ease) both; }
 }
 @media (prefers-reduced-motion: reduce) { .ca-tag { animation: none; } }
 @container (max-width: 860px) {
@@ -229,3 +229,18 @@ body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
   .ca-client { align-items: flex-start; }
   .ca-client-r { text-align: left; }
 }
+
+/* Relatórios de emendas */
+.ca-rel { display: flex; flex-direction: column; }
+.ca-rel-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.ca-rel-row:first-child { border-top: 0; }
+.ca-rel-ic { width: 34px; height: 40px; border-radius: 6px; border: 1px solid rgba(255,92,122,.45); background: rgba(255,92,122,.08); color: var(--c-emer); display: grid; place-items: center; font: 600 9px/1 var(--mono); letter-spacing: .06em; }
+.ca-rel-t { font-size: 14px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca-rel-m { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 12px; color: var(--fg-3); }
+.ca-rel-m .ca-chip { height: 24px; padding: 0 9px; font-size: 11.5px; }
+.ca-rel-a { display: flex; gap: 6px; }
+.ca-rel-a .ca-ghost { height: 32px; }
+.ca-rel-a .ca-ghost.ca-pri { color: var(--c-accent); border-color: rgba(124,196,255,.4); }
+.ca-rel-erro { color: var(--c-emer); font-size: 12px; }
+@container (max-width: 560px) { .ca-rel-row { grid-template-columns: 34px minmax(0, 1fr); } .ca-rel-a { grid-column: 2; } }
+a.ca-ghost { display: inline-flex; align-items: center; text-decoration: none; }

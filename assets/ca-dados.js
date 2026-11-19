@@ -252,3 +252,26 @@ CA.aplicarInspecoes = function (condicao, inspecoes) {
   });
   return out;
 };
+
+/* Relatórios de emendas (PDFs na pasta do Drive). Nome do arquivo: TAG_AAAA-MM-DD_assunto.pdf */
+CA.lerRelatorio = function (f) {
+  var base = String(f.nome || '').replace(/\.pdf$/i, '');
+  var m = base.match(/^([^_]+)_(\d{4}-\d{2}-\d{2})_?(.*)$/);
+  var tag = m ? CA.tag(m[1]) : '';
+  var assunto = m ? m[3] : base;
+  assunto = assunto.replace(/[-_]+/g, ' ').trim()
+    .replace(/\brelatorio\b/gi, 'relatório').replace(/\binspecao\b/gi, 'inspeção').replace(/\bmanutencao\b/gi, 'manutenção').replace(/\bvulcanizacao\b/gi, 'vulcanização');
+  return {id: f.id, nome: f.nome, tamanho: f.tamanho || 0, enviado: f.enviado || '', por: f.por || '',
+    tag: CA.tagValida(tag) ? tag : '', data: m ? m[2] : '', planta: CA.tagValida(tag) ? CA.planta(tag) : '',
+    titulo: assunto ? assunto.charAt(0).toUpperCase() + assunto.slice(1) : 'Relatório'};
+};
+CA.baixarRelatorio = function (id) {
+  return fetch(CA_GRAVACAO + '?acao=baixar&id=' + encodeURIComponent(id), {cache: 'no-store'})
+    .then(function (r) { if (!r.ok) throw new Error('o servidor respondeu ' + r.status + '.'); return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error(r.erro || 'não foi possível baixar.');
+      var bin = atob(r.base64), u8 = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return {nome: r.nome, blob: new Blob([u8], {type: 'application/pdf'})};
+    });
+};

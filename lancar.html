@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap">
-<link rel="stylesheet" href="assets/painel.css?v=20261118b">
+<link rel="stylesheet" href="assets/painel.css?v=20261119a">
 <style>
 :root { color-scheme: dark; --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-anthropic-serif: "Source Serif 4", Georgia, serif; }
 html, body { margin: 0; background: #080A0F; }
@@ -114,6 +114,7 @@ input[type=date].lf-in { padding-right: 8px; }
       <button type="button" role="tab" data-aba="atividade" aria-pressed="true">Atividade</button>
       <button type="button" role="tab" data-aba="inspecao" aria-pressed="false">Inspeção</button>
       <button type="button" role="tab" data-aba="trecho" aria-pressed="false">Trechos</button>
+      <button type="button" role="tab" data-aba="relatorio" aria-pressed="false">Relatório</button>
     </div>
 
     <!-- ATIVIDADE -->
@@ -195,6 +196,21 @@ input[type=date].lf-in { padding-right: 8px; }
       <div class="lf-acoes"><button type="submit" class="lf-btn">Revisar</button></div>
     </form>
 
+    <!-- RELATÓRIO -->
+    <form class="ca-panel lf-card" id="f-relatorio" data-tipo="relatorio" novalidate hidden>
+      <h2>Anexar relatório em PDF</h2>
+      <p class="lf-sub">Ficha de emenda, relatório de serviço ou de inspeção. O arquivo vai para a pasta de relatórios e aparece no painel, ligado ao equipamento.</p>
+      <div class="lf-linha">
+        <div class="lf-campo"><label for="r-tag">Equipamento <b>*</b></label><input class="ca-input lf-in" id="r-tag" list="l-tags" placeholder="ex.: 150TP004" autocomplete="off" data-tag-info="r-info"><div class="lf-erro" data-erro="tag"></div></div>
+        <div class="lf-campo"><label for="r-data">Data do serviço <b>*</b></label><input class="ca-input lf-in" id="r-data" type="date"><div class="lf-erro" data-erro="data"></div></div>
+      </div>
+      <div class="lf-info" id="r-info"></div>
+      <div class="lf-campo"><span class="lf-rot">Tipo <b>*</b></span><div class="lf-chips" id="r-tipo" data-opcoes="FICHA DE EMENDA|RELATÓRIO DE EMENDA|RELATÓRIO DE INSPEÇÃO|OUTRO"></div><div class="lf-erro" data-erro="tipo"></div></div>
+      <div class="lf-campo"><label for="r-desc">Descrição curta</label><input class="ca-input lf-in" id="r-desc" maxlength="40" placeholder="ex.: emenda 03, emenda a quente"></div>
+      <div class="lf-campo"><label for="r-arq">Arquivo PDF <b>*</b></label><input class="ca-input lf-in" id="r-arq" type="file" accept="application/pdf,.pdf" style="padding-top:10px"><div class="lf-erro" data-erro="arq"></div></div>
+      <div class="lf-acoes"><button type="submit" class="lf-btn">Revisar</button></div>
+    </form>
+
     <!-- REVISÃO -->
     <section class="ca-panel lf-card" id="revisao" hidden>
       <h2>Confira antes de enviar</h2>
@@ -215,7 +231,7 @@ input[type=date].lf-in { padding-right: 8px; }
 </div>
 </div>
 
-<script src="assets/ca-dados.js?v=20261118b"></script>
+<script src="assets/ca-dados.js?v=20261119a"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -301,7 +317,7 @@ input[type=date].lf-in { padding-right: 8px; }
     inp.addEventListener('input', function () { mostrarCorreia(inp); });
     inp.addEventListener('blur', function () { if (inp.value.trim()) { inp.value = CA.tag(inp.value); mostrarCorreia(inp); } });
   });
-  ['a-data', 'i-data', 't-data'].forEach(function (id) { $(id).value = hojeISO(); $(id).max = hojeISO(); $(id).min = '2020-01-01'; });
+  ['a-data', 'i-data', 't-data', 'r-data'].forEach(function (id) { $(id).value = hojeISO(); $(id).max = hojeISO(); $(id).min = '2020-01-01'; });
 
   /* ---------- Atividade: correia nova e emendas ---------- */
   function atualizarAtividade() {
@@ -448,6 +464,20 @@ input[type=date].lf-in { padding-right: 8px; }
       li.push(['Inspetor', ri.INSPETOR || '—']);
       return {tipo: tipo, registros: [ri], linhas: li, resumo: 'Inspeção ' + cap(sit) + ' · ' + ri.EQUIPAMENTO + ' · ' + ri.DATA};
     }
+    if (tipo === 'relatorio') {
+      var br = validarBase(form, 'r'), okr = br.ok, tipoR = valorChips($('r-tipo')), desc = $('r-desc').value.trim(), arq = $('r-arq').files[0];
+      if (!tipoR) { erro(form, 'tipo', 'Escolha o tipo de relatório.'); okr = false; }
+      if (!arq) { erro(form, 'arq', 'Escolha o arquivo PDF.'); okr = false; }
+      else if (!/\.pdf$/i.test(arq.name) && arq.type !== 'application/pdf') { erro(form, 'arq', 'O arquivo precisa ser PDF.'); okr = false; }
+      else if (arq.size > 20 * 1048576) { erro(form, 'arq', 'O arquivo passa de 20 MB. Diminua o PDF antes de enviar.'); okr = false; }
+      if (!okr) return null;
+      var assunto = [tipoR === 'OUTRO' ? '' : tipoR, desc].filter(Boolean).join(' ') || 'relatorio';
+      var slug = CA.semAcento(assunto).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+      return {tipo: 'relatorio', arquivo: arq, corpo: {acao: 'relatorio', tag: br.tag, data: br.data, assunto: assunto},
+        linhas: [['Equipamento', br.tag], ['Data do serviço', isoBR(br.data)], ['Tipo', cap(tipoR)], ['Descrição', desc || '—'],
+          ['Arquivo', arq.name + ' (' + nf1.format(arq.size / 1048576) + ' MB)'], ['Nome na pasta', br.tag + '_' + br.data + '_' + slug + '.pdf']],
+        resumo: 'Relatório · ' + br.tag + ' · ' + isoBR(br.data)};
+    }
     var bt = validarBase(form, 't'), okt = bt.ok, ts = lerTrechos();
     if (!ts.length) { erro(form, 'trechos', 'Adicione pelo menos um trecho.'); okt = false; }
     var ruins = ts.map(function (t, i) { return (!t.ini || !t.fim || !(Number(t.m) > 0)) ? i + 1 : 0; }).filter(Boolean);
@@ -468,15 +498,16 @@ input[type=date].lf-in { padding-right: 8px; }
 
   /* ---------- Fluxo: abas, revisão, envio ---------- */
   var abaAtual = 'atividade', pendente = null;
+  var ABAS_L = ['atividade', 'inspecao', 'trecho', 'relatorio'];
   document.querySelectorAll('[data-aba]').forEach(function (b) {
     b.addEventListener('click', function () {
       abaAtual = b.dataset.aba;
       document.querySelectorAll('[data-aba]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
-      ['atividade', 'inspecao', 'trecho'].forEach(function (t) { $('f-' + t).hidden = t !== abaAtual; });
+      ABAS_L.forEach(function (t) { $('f-' + t).hidden = t !== abaAtual; });
       $('revisao').hidden = true;
     });
   });
-  ['atividade', 'inspecao', 'trecho'].forEach(function (t) {
+  ABAS_L.forEach(function (t) {
     $('f-' + t).addEventListener('submit', function (ev) {
       ev.preventDefault();
       var p = montar(t);
@@ -494,10 +525,13 @@ input[type=date].lf-in { padding-right: 8px; }
   $('rev-enviar').addEventListener('click', function () {
     if (!pendente || !CA_GRAVACAO) return;
     var btn = $('rev-enviar'); btn.disabled = true; btn.textContent = 'Enviando…';
-    enviar({pin: sessao.pin, tipo: pendente.tipo, registros: pendente.registros}).then(function (r) {
+    var envio = pendente.tipo === 'relatorio'
+      ? lerBase64(pendente.arquivo).then(function (b64) { return enviar(Object.assign({pin: sessao.pin, base64: b64}, pendente.corpo)); })
+      : enviar({pin: sessao.pin, tipo: pendente.tipo, registros: pendente.registros});
+    envio.then(function (r) {
       if (!r.ok) throw new Error(r.erro || 'A planilha recusou o envio.');
       historico(pendente, r.id);
-      aviso('Gravado na planilha (código ' + r.id + ').');
+      aviso(pendente.tipo === 'relatorio' ? 'Relatório guardado na pasta (' + r.nome + ').' : 'Gravado na planilha (código ' + r.id + ').');
       limparForm(pendente.tipo);
       pendente = null;
       $('revisao').hidden = true; $('f-' + abaAtual).hidden = false;
@@ -515,6 +549,14 @@ input[type=date].lf-in { padding-right: 8px; }
     if (tipo === 'inspecao') $('i-insp').value = sessao.nome || '';
     if (tipo === 'trecho') { $('t-lista').replaceChildren(); resumoTrechos(); }
     f.querySelector('[data-tag-info]').value = tag;
+  }
+  function lerBase64(arq) {
+    return new Promise(function (ok, falha) {
+      var fr = new FileReader();
+      fr.onload = function () { ok(String(fr.result).split(',')[1] || ''); };
+      fr.onerror = function () { falha(new Error('não foi possível ler o arquivo.')); };
+      fr.readAsDataURL(arq);
+    });
   }
   function enviar(corpo) {
     return fetch(CA_GRAVACAO, {method: 'POST', body: JSON.stringify(corpo), redirect: 'follow'})
@@ -562,6 +604,7 @@ input[type=date].lf-in { padding-right: 8px; }
   $('sem-gravacao').hidden = !!CA_GRAVACAO;
   if (sessao.pin && (sessao.nome || !CA_GRAVACAO)) entrou();
   atualizarAtividade();
+  if (location.hash === '#relatorio') { var ab = document.querySelector('[data-aba="relatorio"]'); if (ab) ab.click(); }
   desenharHist();
   carregarCadastro();
 })();
