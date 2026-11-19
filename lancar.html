@@ -16,6 +16,7 @@
 <style>
 :root { color-scheme: dark; --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-anthropic-serif: "Source Serif 4", Georgia, serif; }
 html, body { margin: 0; background: #080A0F; }
+[hidden] { display: none !important; }   /* campo escondido some de verdade, mesmo com display:flex */
 body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
 .lf { max-width: 760px; margin: 0 auto; gap: 18px; padding-bottom: 120px; }
 .lf-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -127,6 +128,8 @@ input[type=date].lf-in { padding-right: 8px; }
       </div>
       <div class="lf-info" id="a-info"></div>
       <div class="lf-campo"><span class="lf-rot">Atividade <b>*</b></span><div class="lf-chips" id="a-ativ" data-opcoes="SUBSTITUIR|EMPALMO|REFAZER EMENDA|REPARAR EMENDA|REPARO A FRIO|REPARO A QUENTE|REPARO COM GRAMPO|TRUE FIX|REVESTIR TAMBOR|PREPARAÇÃO|MANUTENÇÃO"></div><div class="lf-erro" data-erro="ativ"></div></div>
+      <div class="lf-campo" id="a-tipo-emenda-box" hidden><span class="lf-rot">Tipo de emenda</span><div class="lf-chips" id="a-tipo-emenda" data-opcoes="EMENDA FRIA|EMENDA QUENTE|EMENDA MECÂNICA"></div></div>
+      <div class="lf-campo" id="a-tipo-reparo-box" hidden><span class="lf-rot">Tipo de reparo</span><div class="lf-chips" id="a-tipo-reparo" data-opcoes="REPARO COM TIRA|REPARO COM LONA|RECOLAR|EMBUTIDO|REPOSIÇÃO DE COBERTURA"></div></div>
 
       <div class="lf-grupo" id="a-nova" hidden>
         <h3 id="a-nova-t">Correia nova que entrou</h3>
@@ -141,7 +144,6 @@ input[type=date].lf-in { padding-right: 8px; }
         <div class="lf-campo"><label for="a-emendas">Corrigir número de emendas (só se for diferente)</label><input class="ca-input lf-in" id="a-emendas" type="number" inputmode="numeric" min="0" step="1" placeholder="deixe vazio para usar o cálculo"></div>
       </div>
 
-      <div class="lf-campo"><span class="lf-rot">Tipo de emenda ou reparo</span><div class="lf-chips" id="a-tipo" data-opcoes="EMENDA FRIA|EMENDA QUENTE|EMENDA MECÂNICA|FLEXSTEEL|REPARO COM TIRA|REPARO COM LONA|RECOLAR|EMBUTIDO|TRUE FIX|REPARO COM GRAMPO|REPOSIÇÃO DE COBERTURA"></div></div>
       <div class="lf-campo"><span class="lf-rot">Programação <b>*</b></span><div class="lf-chips" id="a-prog" data-opcoes="PROGRAMADO|OPORTUNIDADE|CORRETIVA|EMERGENCIA"></div><div class="lf-erro" data-erro="prog"></div></div>
       <div class="lf-campo"><span class="lf-rot">Motivo <b>*</b></span><div class="lf-chips" id="a-motivo" data-opcoes="DANO NA CORREIA|DANO NA EMENDA|DANO LONGITUDINAL|DESGASTE DA CORREIA|PROTEGER EMENDA|CORREIA ROMPEU|DESGASTE"></div><div class="lf-erro" data-erro="motivo"></div></div>
       <div class="lf-linha">
@@ -167,10 +169,10 @@ input[type=date].lf-in { padding-right: 8px; }
       <div class="lf-info" id="i-info"></div>
       <div class="lf-campo"><span class="lf-rot">Situação <b>*</b></span><div class="lf-chips" id="i-sit" data-opcoes="BOM|REGULAR|CRÍTICO"></div><div class="lf-erro" data-erro="sit"></div></div>
       <div class="lf-campo"><label for="i-visto">O que foi visto <b>*</b></label><textarea class="ca-input lf-in" id="i-visto" placeholder="ex.: dano longitudinal no lado direito, atingiu a primeira lona"></textarea><div class="lf-erro" data-erro="visto"></div></div>
-      <div class="lf-campo"><label for="i-acao">Ação recomendada</label><textarea class="ca-input lf-in" id="i-acao" placeholder="ex.: acompanhar evolução; programar reparo a quente"></textarea></div>
+      <div class="lf-campo" id="i-acao-box"><label for="i-acao">Ação recomendada</label><textarea class="ca-input lf-in" id="i-acao" placeholder="ex.: acompanhar evolução; programar reparo a quente"></textarea></div>
       <div class="lf-campo"><span class="lf-rot">Correia preparada?</span><div class="lf-chips" id="i-prep" data-opcoes="SIM|NÃO|EM PREPARAÇÃO"></div></div>
       <div class="lf-linha">
-        <div class="lf-campo"><label for="i-rec">Recursos necessários</label><input class="ca-input lf-in" id="i-rec" placeholder="ex.: caminhão munk, guindaste"></div>
+        <div class="lf-campo" id="i-rec-box"><label for="i-rec">Recursos necessários</label><input class="ca-input lf-in" id="i-rec" placeholder="ex.: caminhão munk, guindaste"></div>
         <div class="lf-campo"><label for="i-larg">Largura medida (pol)</label><input class="ca-input lf-in" id="i-larg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="se houver perda de borda"></div>
       </div>
       <div class="lf-campo"><label for="i-insp">Inspetor</label><input class="ca-input lf-in" id="i-insp"></div>
@@ -319,9 +321,25 @@ input[type=date].lf-in { padding-right: 8px; }
   });
   ['a-data', 'i-data', 't-data', 'r-data'].forEach(function (id) { $(id).value = hojeISO(); $(id).max = hojeISO(); $(id).min = '2020-01-01'; });
 
-  /* ---------- Atividade: correia nova e emendas ---------- */
+  /* ---------- Atividade: cada atividade mostra só os seus campos ---------- */
+  var AT_EMENDA = ['SUBSTITUIR', 'EMPALMO', 'REFAZER EMENDA'];
+  var AT_REPARO = ['REPARAR EMENDA', 'REPARO A FRIO', 'REPARO A QUENTE'];
+  var AT_TIPO_IGUAL = ['REPARO COM GRAMPO', 'TRUE FIX'];   // o tipo é a própria atividade
+  function tipoDaAtividade(at) {
+    if (AT_EMENDA.indexOf(at) >= 0) return valorChips($('a-tipo-emenda'));
+    if (AT_REPARO.indexOf(at) >= 0) return valorChips($('a-tipo-reparo'));
+    if (AT_TIPO_IGUAL.indexOf(at) >= 0) return at;
+    return '';
+  }
+  var atAnterior = null;
   function atualizarAtividade() {
     var at = valorChips($('a-ativ')), nova = at === 'SUBSTITUIR' || at === 'EMPALMO';
+    if (at !== atAnterior) { $('a-emendas').value = ''; atAnterior = at; }   // correção manual vale só para a atividade em que foi digitada
+    var mostraEmenda = AT_EMENDA.indexOf(at) >= 0, mostraReparo = AT_REPARO.indexOf(at) >= 0;
+    $('a-tipo-emenda-box').hidden = !mostraEmenda;
+    $('a-tipo-reparo-box').hidden = !mostraReparo;
+    if (!mostraEmenda) valorChips($('a-tipo-emenda'), '');
+    if (!mostraReparo) valorChips($('a-tipo-reparo'), '');
     $('a-nova').hidden = !nova;
     $('a-nova-t').textContent = at === 'EMPALMO' ? 'Trecho novo que entrou' : 'Correia nova que entrou';
     var b = Math.max(1, Math.round(Number($('a-bobinas').value) || 1)), n = 0, exp = '';
@@ -335,12 +353,17 @@ input[type=date].lf-in { padding-right: 8px; }
     if (at === 'EMPALMO' || at === 'SUBSTITUIR') {
       // sugestão: cabo de aço vai a quente; lona, a frio (pode trocar)
       var o = cad.tags[CA.tag($('a-tag').value)] || {};
-      if (!valorChips($('a-tipo'))) valorChips($('a-tipo'), CA.tipoCarcaca(o.carcaca || '') === 'CABO DE AÇO' ? 'EMENDA QUENTE' : 'EMENDA FRIA');
+      if (!valorChips($('a-tipo-emenda'))) valorChips($('a-tipo-emenda'), CA.tipoCarcaca(o.carcaca || '') === 'CABO DE AÇO' ? 'EMENDA QUENTE' : 'EMENDA FRIA');
     }
   }
   $('a-ativ').addEventListener('escolha', atualizarAtividade);
   $('a-bobinas').addEventListener('input', atualizarAtividade);
   $('a-parada').addEventListener('change', function () { $('a-horas').disabled = $('a-parada').checked; if ($('a-parada').checked) $('a-horas').value = ''; });
+
+  /* ---------- Inspeção: correia em bom estado não pede ação nem recursos ---------- */
+  function inspecaoBoa() { return valorChips($('i-sit')) === 'BOM'; }
+  function atualizarInspecao() { var bom = inspecaoBoa(); $('i-acao-box').hidden = bom; $('i-rec-box').hidden = bom; }
+  $('i-sit').addEventListener('escolha', atualizarInspecao);
 
   /* ---------- Trechos ---------- */
   var FAB = ['BORPAC', 'MERCURIO', 'METSO', 'FLEXSTEEL', 'OUTRO'];
@@ -435,13 +458,16 @@ input[type=date].lf-in { padding-right: 8px; }
       if (!ok) return null;
       var calc = Number($('a-emendas-n').dataset.calc || 0), corr = $('a-emendas').value.trim();
       var emendas = corr !== '' ? Math.round(Number(corr)) : calc;
+      var tipoAt = tipoDaAtividade(at);
       var reg = {'EQUIPAMENTO': b.tag, 'PLANTA': (cad.tags[b.tag] || {}).planta || CA.planta(b.tag), 'DATA': isoBR(b.data), 'ATIVIDADE': at,
-        'TIPO DE EMENDA OU REPARO': valorChips($('a-tipo')), 'PROGRAMAÇÃO': prog, 'MOTIVO': mot, 'DURAÇÃO EM HORAS': parada ? 'PARADA ANUAL' : String(horas).replace('.', ','),
+        'TIPO DE EMENDA OU REPARO': tipoAt, 'PROGRAMAÇÃO': prog, 'MOTIVO': mot, 'DURAÇÃO EM HORAS': parada ? 'PARADA ANUAL' : String(horas).replace('.', ','),
         'SITUAÇÃO': valorChips($('a-sit')), 'BOBINAS': nova ? String(Math.round(Number($('a-bobinas').value))) : '', 'METROS IMPLEMENTADOS': nova ? String($('a-metros').value).replace('.', ',') : '',
         'EMENDAS FEITAS': emendas ? String(emendas) : (at === 'EMPALMO' || at === 'SUBSTITUIR' || at === 'REFAZER EMENDA' ? '0' : ''), 'FABRICANTE': nova ? valorChips($('a-fab')) : '',
         'EQUIPE': $('a-equipe').value.trim(), 'OS': $('a-os').value.trim(), 'OBS': $('a-obs').value.trim()};
-      var linhas = [['Equipamento', reg.EQUIPAMENTO], ['Data', reg.DATA], ['Atividade', cap(at)], ['Tipo', cap(reg['TIPO DE EMENDA OU REPARO']) || '—'], ['Programação', prog === 'EMERGENCIA' ? 'Emergência' : cap(prog)],
-        ['Motivo', cap(mot)], ['Duração', parada ? 'Parada anual' : horas + ' h'], ['Situação', cap(reg['SITUAÇÃO'])]];
+      var linhas = [['Equipamento', reg.EQUIPAMENTO], ['Data', reg.DATA], ['Atividade', cap(at)]];
+      if (AT_EMENDA.indexOf(at) >= 0) linhas.push(['Tipo de emenda', cap(tipoAt) || '—']);
+      if (AT_REPARO.indexOf(at) >= 0) linhas.push(['Tipo de reparo', cap(tipoAt) || '—']);
+      linhas.push(['Programação', prog === 'EMERGENCIA' ? 'Emergência' : cap(prog)], ['Motivo', cap(mot)], ['Duração', parada ? 'Parada anual' : horas + ' h'], ['Situação', cap(reg['SITUAÇÃO'])]);
       if (nova) linhas.push(['Metros que entraram', reg['METROS IMPLEMENTADOS'] + ' m'], ['Bobinas', reg.BOBINAS], ['Fabricante', cap(reg.FABRICANTE) || '—']);
       if (reg['EMENDAS FEITAS']) linhas.push(['Emendas feitas', reg['EMENDAS FEITAS'] + (corr !== '' ? ' (corrigido à mão)' : '')]);
       if (reg.EQUIPE) linhas.push(['Equipe', reg.EQUIPE]);
@@ -454,8 +480,9 @@ input[type=date].lf-in { padding-right: 8px; }
       if (!sit) { erro(form, 'sit', 'Escolha a situação.'); oki = false; }
       if (!visto) { erro(form, 'visto', 'Descreva o que foi visto (mesmo que seja "sem alteração").'); oki = false; }
       if (!oki) return null;
-      var ri = {'EQUIPAMENTO': bi.tag, 'DATA': isoBR(bi.data), 'SITUAÇÃO': sit, 'O QUE FOI VISTO': visto, 'AÇÃO RECOMENDADA': $('i-acao').value.trim(),
-        'CORREIA PREPARADA?': valorChips($('i-prep')), 'RECURSOS NECESSÁRIOS': $('i-rec').value.trim(), 'LARGURA MEDIDA (POL)': String($('i-larg').value).replace('.', ','), 'INSPETOR': $('i-insp').value.trim()};
+      var bom = sit === 'BOM';   // campos escondidos não vão para a planilha
+      var ri = {'EQUIPAMENTO': bi.tag, 'DATA': isoBR(bi.data), 'SITUAÇÃO': sit, 'O QUE FOI VISTO': visto, 'AÇÃO RECOMENDADA': bom ? '' : $('i-acao').value.trim(),
+        'CORREIA PREPARADA?': valorChips($('i-prep')), 'RECURSOS NECESSÁRIOS': bom ? '' : $('i-rec').value.trim(), 'LARGURA MEDIDA (POL)': String($('i-larg').value).replace('.', ','), 'INSPETOR': $('i-insp').value.trim()};
       var li = [['Equipamento', ri.EQUIPAMENTO], ['Data', ri.DATA], ['Situação', cap(sit)], ['O que foi visto', visto]];
       if (ri['AÇÃO RECOMENDADA']) li.push(['Ação recomendada', ri['AÇÃO RECOMENDADA']]);
       if (ri['CORREIA PREPARADA?']) li.push(['Correia preparada?', cap(ri['CORREIA PREPARADA?'])]);
@@ -546,7 +573,7 @@ input[type=date].lf-in { padding-right: 8px; }
     f.querySelectorAll('input[type=checkbox]').forEach(function (i) { i.checked = false; i.dispatchEvent(new Event('change')); });
     f.querySelectorAll('[data-opcoes]').forEach(function (el) { valorChips(el, el.dataset.padrao || ''); });
     if (tipo === 'atividade') { $('a-bobinas').value = '1'; atualizarAtividade(); }
-    if (tipo === 'inspecao') $('i-insp').value = sessao.nome || '';
+    if (tipo === 'inspecao') { $('i-insp').value = sessao.nome || ''; atualizarInspecao(); }
     if (tipo === 'trecho') { $('t-lista').replaceChildren(); resumoTrechos(); }
     f.querySelector('[data-tag-info]').value = tag;
   }
@@ -604,6 +631,7 @@ input[type=date].lf-in { padding-right: 8px; }
   $('sem-gravacao').hidden = !!CA_GRAVACAO;
   if (sessao.pin && (sessao.nome || !CA_GRAVACAO)) entrou();
   atualizarAtividade();
+  atualizarInspecao();
   if (location.hash === '#relatorio') { var ab = document.querySelector('[data-aba="relatorio"]'); if (ab) ab.click(); }
   desenharHist();
   carregarCadastro();
