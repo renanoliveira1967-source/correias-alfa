@@ -1,5 +1,6 @@
 /* ===== Fontes de dados: abas publicadas da planilha do Google (Arquivo > Compartilhar > Publicar na Web > CSV) ===== */
-var CA_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2cDDTQq8AKKFN5pThZjstkB1glE1c14aqlK2m-n92Uv2JsR4i6yo59SxFP3HGSZ5Sr68KX5FNCOKj/pub?single=true&output=csv&gid=';
+// cópia da planilha na conta do Renan (desde 18/11/2026; a original era do Leonardo)
+var CA_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5Q6RsLsvQ5AMgdhXw8By5e4ZFTnmQyLHeLIodjO0hWKNceExtSJ6f02wiErsCVyRjlvLisgsEXlZf/pub?single=true&output=csv&gid=';
 var CA_FONTES = [
   {id: 'atividades', nome: 'ATIVIDADES 2026', gid: '1267231826', dev: 'atividades.csv'},
   {id: 'especificacao', nome: 'ESPECIFICAÇÃO', gid: '812110065', dev: 'especificacao.csv'},
