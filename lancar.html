@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap">
-<link rel="stylesheet" href="assets/painel.css">
+<link rel="stylesheet" href="assets/painel.css?v=20261118b">
 <style>
 :root { color-scheme: dark; --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-anthropic-serif: "Source Serif 4", Georgia, serif; }
 html, body { margin: 0; background: #080A0F; }
@@ -215,7 +215,7 @@ input[type=date].lf-in { padding-right: 8px; }
 </div>
 </div>
 
-<script src="assets/ca-dados.js"></script>
+<script src="assets/ca-dados.js?v=20261118b"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -484,7 +484,7 @@ input[type=date].lf-in { padding-right: 8px; }
       pendente = p;
       var lista = $('rev-lista'); lista.replaceChildren();
       p.linhas.forEach(function (l) { var d = document.createElement('div'), s = document.createElement('span'), v = document.createElement('p'); v.style.margin = '0'; s.textContent = l[0]; v.textContent = l[1]; d.append(s, v); lista.append(d); });
-      $('rev-erro').textContent = '';
+      $('rev-erro').textContent = CA_GRAVACAO ? '' : 'O envio está desligado nesta versão da página. Recarregue com Ctrl+F5 (no celular, feche e abra a página de novo) e entre com o PIN outra vez.';
       $('f-' + t).hidden = true; $('revisao').hidden = false;
       $('rev-enviar').disabled = !CA_GRAVACAO;
       $('revisao').scrollIntoView({block: 'start', behavior: 'smooth'});
