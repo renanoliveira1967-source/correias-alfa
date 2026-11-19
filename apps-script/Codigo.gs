@@ -37,7 +37,7 @@ const ABAS = {
 };
 
 // planilha do relatório: funciona tanto colado pela planilha (Extensões > Apps Script) quanto num projeto avulso
-const PLANILHA_ID = '1qj79sFW3A26g6i3JTXBzoodn8_RlhRPN51GLrrQn0_g';
+const PLANILHA_ID = '1Qv5s_TZQswhsn_b0k-lCsrawaVbc1Jvx0vNkwa2NOjc';
 function planilha_() {
   return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(PLANILHA_ID);
 }
