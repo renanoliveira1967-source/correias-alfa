@@ -8,9 +8,9 @@ var CA_FONTES = [
   {id: 'equipamento', tag: '220TP003', nome: '220TP003', gid: '69770680', dev: '220TP003.csv'},
   {id: 'equipamento', tag: '150TP004', nome: '150TP004', gid: '875471775', dev: '150TP004.csv'},
   // abas criadas pela página de lançamentos (publicar como CSV e colar o gid aqui)
-  {id: 'lanc_ativ', nome: 'LANÇ ATIVIDADES', gid: '', dev: 'lanc_ativ.csv', opcional: true},
-  {id: 'lanc_insp', nome: 'LANÇ INSPEÇÕES', gid: '', dev: 'lanc_insp.csv', opcional: true},
-  {id: 'lanc_trechos', nome: 'LANÇ TRECHOS', gid: '', dev: 'lanc_trechos.csv', opcional: true}
+  {id: 'lanc_ativ', nome: 'LANÇ ATIVIDADES', gid: '751093016', dev: 'lanc_ativ.csv', opcional: true},
+  {id: 'lanc_insp', nome: 'LANÇ INSPEÇÕES', gid: '676100646', dev: 'lanc_insp.csv', opcional: true},
+  {id: 'lanc_trechos', nome: 'LANÇ TRECHOS', gid: '1882084482', dev: 'lanc_trechos.csv', opcional: true}
 ];
 // endereço do App da Web do Apps Script que grava os lançamentos na planilha
 var CA_GRAVACAO = '';
